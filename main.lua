@@ -88,8 +88,7 @@ return function(mod)
       game.data.text and game.data.text._OaksLabReceivedMonText
         or ("You received " .. speciesName(game, species) .. "!"),
       function()
-        local prompt = ("Would you like to give
-your %s a nickname?")
+        local prompt = ("Would you like to give\nyour %s a nickname?")
           :format(speciesName(game, species))
 
         game.stack:push(TextBox.new(game, prompt, nil, {
@@ -124,11 +123,7 @@ your %s a nickname?")
       kind = "choice",
       pic = "oak",
       saveKey = "starter",
-      text = "Before you leave,
-you should have a
-POKéMON of your own!\fI have three wonderful
-POKéMON here for you.
-Which one would you like?",
+      text = "Before you leave,\nyou should have a\nPOKéMON of your own!\fI have three wonderful\nPOKéMON here for you.\nWhich one would you like?",
       choices = { "BULBASAUR", "CHARMANDER", "SQUIRTLE" },
       values = { "BULBASAUR", "CHARMANDER", "SQUIRTLE" },
       tx = 4,
@@ -146,40 +141,28 @@ Which one would you like?",
       id = "alternate_intro_pokedex_request",
       kind = "say",
       pic = "oak",
-      text = "I have a request for you.
-I want you to help me with
-my research.",
+      text = "I have a request for you.\nI want you to help me with\nmy research.",
     })
 
     mod.ui.insertStepAfter(steps, "alternate_intro_pokedex_request", {
       id = "alternate_intro_pokedex",
       kind = "say",
       pic = "oak",
-      text = "I've given you an invention
-of mine, the POKéDEX!\fIt automatically records data
-on POKéMON you've seen or
-caught! It's a hi-tech
-encyclopedia!",
+      text = "I've given you an invention\nof mine, the POKéDEX!\fIt automatically records data\non POKéMON you've seen or\ncaught! It's a hi-tech\nencyclopedia!",
     })
 
     mod.ui.insertStepAfter(steps, "alternate_intro_pokedex", {
       id = "alternate_intro_pokedex_given",
       kind = "say",
       pic = "oak",
-      text = "Take this with you, {PLAYER}!
-It will help you on your
-journey.",
+      text = "Take this with you, {PLAYER}!\nIt will help you on your\njourney.",
     })
 
     mod.ui.insertStepAfter(steps, "alternate_intro_pokedex_given", {
       id = "alternate_intro_pokedex_dream",
       kind = "say",
       pic = "oak",
-      text = "To make a complete guide on
-all the POKéMON in the world...\fThat was my dream! But, I'm too
-old! I can't do it! So, I want
-you to fulfill my dream for me!\fGet moving! This is a great
-undertaking in POKéMON history!",
+      text = "To make a complete guide on\nall the POKéMON in the world...\fThat was my dream! But, I'm too\nold! I can't do it! So, I want\nyou to fulfill my dream for me!\fGet moving! This is a great\nundertaking in POKéMON history!",
     })
 
     mod.ui.insertStepAfter(steps, "alternate_intro_pokedex_dream", {
@@ -385,16 +368,12 @@ undertaking in POKéMON history!",
         { "move_npc", 1, "down", 1 },
         { "face_player" },
         { "show_text",
-          "Right. All kids leave home
-someday. It said so on TV." },
+          "Right. All kids leave home\nsomeday. It said so on TV." },
         { "show_text",
-          "I've packed some fresh
-underwear for you, too.You'll need to be prepared
-for your journey!" },
+          "I've packed some fresh\nunderwear for you, too.You'll need to be prepared\nfor your journey!" },
         { "give_item", "POKE_BALL", 10, false },
         { "show_text",
-          "{PLAYER} got 10 POKé BALLs!Use them to catch
-WILD POKéMON!" },
+          "{PLAYER} got 10 POKé BALLs!Use them to catch\nWILD POKéMON!" },
         { "move_npc", 1, "up", 1 },
         { "set_flag", "MOD_ALTERNATE_INTRO_MOM_GIFT" },
       }
