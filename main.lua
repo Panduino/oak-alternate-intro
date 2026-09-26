@@ -489,6 +489,14 @@ return function(mod)
         save = game.save,
         overworld = ow,
       }, "OAKS_LAB", "OAKSLAB_OAK")
+
+      -- The alternate intro's Rival battle already happened outside Pallet
+      -- Town. He should not remain in the lab or trigger the vanilla lab battle.
+      Commands.hide_object({
+        game = game,
+        save = game.save,
+        overworld = ow,
+      }, "OAKS_LAB", "OAKSLAB_RIVAL")
     end,
   })
 
