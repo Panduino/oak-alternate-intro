@@ -485,11 +485,11 @@ return function(mod)
   })
 
   -- The Town Map is now given during Mom's scene, so Daisy should
-  -- never offer or explain the map. Keep her normal fallback dialogue.
+  -- behave exactly as if she had already handed the map to the player.
   mod.content.map_scripts:register("BLUES_HOUSE", {
     talk = {
       TEXT_BLUESHOUSE_DAISY_SITTING = {
-        { "show_text", "_BluesHouseDaisyRivalAtLabText" },
+        { "show_text", "_BluesHouseDaisyUseMapText" },
       },
     },
   })
@@ -531,6 +531,7 @@ return function(mod)
         { "show_text",
           "{PLAYER} got a TOWN MAP!\fIt shows the towns and\ncities of KANTO." },
         { "set_flag", "EVENT_GOT_TOWN_MAP" },
+        { "hide_object", "BLUES_HOUSE", "BLUESHOUSE_TOWN_MAP" },
         { "walk_npc", 1, returnPath },
         { "set_flag", "MOD_ALTERNATE_INTRO_MOM_GIFT" },
       }
