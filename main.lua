@@ -483,6 +483,11 @@ return function(mod)
       local flags = game.save.flags or {}
       if not flags.EVENT_GOT_POKEDEX then return end
 
+      -- The alternate intro skips the vanilla Poké Ball handoff sequence,
+      -- so set the same progression flag that makes Oak offer his Pokédex
+      -- rating when the player talks to him.
+      flags.EVENT_PALLET_AFTER_GETTING_POKEBALLS = true
+
       local Commands = require("src.script.Commands")
       Commands.show_object({
         game = game,
