@@ -211,6 +211,173 @@ undertaking in POKéMON history!",
     end
   end)
 
+  local RIVAL_OBJECT_INDEX = 99
+
+  -- The vanilla Pallet Town Oak encounter starts hidden at (8,5), below
+  -- the player's camera, then walks up to the tile immediately below the
+  -- player. Reuse that staging for the Rival so this encounter has the same
+  -- offscreen entrance rather than popping the Rival into view.
+  local function spawnRival(ow, game)
+    local NPC = require("src.world.NPC")
+    local obj = {
+      index = RIVAL_OBJECT_INDEX,
+      name = "ALTERNATE_INTRO_RIVAL",
+      sprite = "SPRITE_BLUE",
+      movement = "STAY",
+      range = "UP",
+      x = 8,
+      y = 5,
+    }
+    local rival = NPC.new(game.data, ow.map.id, obj)
+    rival.stepFrames = ow.player.stepFramesCur or ow.player.stepFrames
+    ow.npcPool = ow.npcPool or {}
+    table.insert(ow.npcs, rival)
+    table.insert(ow.entities, rival)
+    ow.npcPool[rival.id] = rival
+    return rival
+  end
+
+  local function despawnRival(ow, rival)
+    if not rival then return end
+    if ow.npcPool then ow.npcPool[rival.id] = nil end
+    for i = #ow.npcs, 1, -1 do
+      if ow.npcs[i] == rival then
+        table.remove(ow.npcs, i)
+        break
+      end
+    end
+    for i = #ow.entities, 1, -1 do
+      if ow.entities[i] == rival then
+        table.remove(ow.entities, i)
+        break
+      end
+    end
+  end
+
+  local function findPath(fromX, fromY, toX, toY)
+    local path = {}
+    local xdist = math.abs(toX - fromX)
+    local ydist = math.abs(toY - fromY)
+    local xdir = toX < fromX and "left" or "right"
+    local ydir = toY < fromY and "up" or "down"
+    local xprog, yprog = 0, 0
+
+    while xprog < xdist or yprog < ydist do
+      if xdist - xprog >= ydist - yprog and xprog < xdist then
+        xprog = xprog + 1
+        path[#path + 1] = xdir
+      else
+        yprog = yprog + 1
+        path[#path + 1] = ydir
+      end
+    end
+
+    return path
+  end
+
+  local function walkRival(ow, rival, steps, done)
+    local i = 0
+    local function nextStep()
+      i = i + 1
+      if not rival or not steps[i] then
+        if done then done() end
+        return
+      end
+      ow:scriptMove(rival, steps[i], 1, nextStep)
+    end
+    nextStep()
+  end
+
+  local function runFirstPalletRivalBattle(game, ow, playerX)
+    if ow.runner:isRunning() then return false end
+
+    local flags = game.save.flags or {}
+    if flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE
+        or not flags.MOD_ALTERNATE_INTRO_MOM_GIFT
+        or not mod.save:get("starter") then
+      return false
+    end
+
+    flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE = true
+    ow.player.facing = "down"
+
+    local rival = spawnRival(ow, game)
+    local starter = mod.save:get("starter")
+    local rivalSpecies = STARTERS[starter] and STARTERS[starter].rival
+    local rivalParty = ({
+      SQUIRTLE = 1,
+      BULBASAUR = 2,
+      CHARMANDER = 3,
+    })[rivalSpecies]
+
+    if not rivalParty then
+      despawnRival(ow, rival)
+      return false
+    end
+
+    local function finish()
+      if ow.map and ow.map.id == "PALLET_TOWN" then
+        despawnRival(ow, rival)
+        require("src.core.Music").playMap(
+          game.data, "PALLET_TOWN",
+          game.save.onBike,
+          ow.player and ow.player.surfing
+        )
+      end
+    end
+
+    local rows = {
+      { "show_text",
+        "{RIVAL}! You're finally out!\\fYou overslept, didn't you?" },
+      { "show_text", "_OaksLabRivalIllTakeYouOnText" },
+      { "save_end_battle_text",
+        "_OaksLabRivalIPickedTheWrongPokemonText" },
+      { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
+      { "heal_party" },
+      { "label", "done" },
+    }
+
+    local function beginBattle()
+      game.save.flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE = true
+      ow.runner:run(rows, {
+        npc = rival,
+        onDone = finish,
+      })
+    end
+
+    -- Match Pallet Town's vanilla Oak entrance: the Rival is initially
+    -- below the visible area, pauses briefly, then walks to the tile below
+    -- the player before speaking.
+    rival.facing = "up"
+    ow.emote = {
+      frames = 6,
+      npc = nil,
+      onDone = function()
+        walkRival(
+          ow,
+          rival,
+          findPath(rival.cellX, rival.cellY, playerX, 2),
+          function()
+            rival.facing = "up"
+            beginBattle()
+          end
+        )
+      end,
+    }
+
+    return true
+  end
+
+  mod.content.map_scripts:register("PALLET_TOWN", {
+    onStep = function(game, ow, x, y)
+      -- Red's Route 1 exit is y == 1. The encounter is armed only after
+      -- Mom's one-time departure scene, so entering the upper exit before
+      -- that point remains completely vanilla.
+      if y ~= 1 then return false end
+      return runFirstPalletRivalBattle(game, ow, x)
+    end,
+  })
+
   mod.content.map_scripts:register("REDS_HOUSE_1F", {
     onStep = function(game, ow, x, y)
       local flags = game.save.flags or {}
