@@ -46,6 +46,32 @@ return function(mod)
       and items[3] and items[3].label == "SQUIRTLE"
   end
 
+  local function isAvatarChoice(items)
+    if #items ~= 2 then return false end
+    return items[1] and items[1].label == "BOY"
+      and items[2] and items[2].label == "GIRL"
+  end
+
+  local function resolvePokemonArt(speech, species)
+    if not speech or not species then return nil, false end
+
+    -- G9 Battle Sprites exposes its front frame directly. Use that same
+    -- resolved art for both the hover preview and the later nickname prompt,
+    -- so the starter never switches back to a ROM sprite between screens.
+    local g9 = mod.find and mod:find("g9-battle-sprites")
+    if g9 and g9.exports and type(g9.exports.frontArt) == "function" then
+      local ok, img = pcall(g9.exports.frontArt, { species = species })
+      if ok and img then return img, true end
+    end
+
+    local path, trueColor = require("src.pokemon.Sprites").path(
+      speech.game.data, species, "front", { kind = "battle" }
+    )
+    local ok, img = pcall(love.graphics.newImage, Assets.resolve(path))
+    if ok and img then return img, trueColor or false end
+    return nil, false
+  end
+
   local function updateStarterPreview(menu)
     local speech = menu._alternateOakStarterSpeech
     if not speech then return end
@@ -53,40 +79,28 @@ return function(mod)
     local species = ({ "BULBASAUR", "CHARMANDER", "SQUIRTLE" })[menu.index]
     if not species then return end
 
-    -- G9 Battle Sprites does not expose its animated battle art through
-    -- pokemon.sprite. It exposes the already-baked front frame through
-    -- mod.exports.frontArt, so use that when the mod is installed.
-    local g9 = mod.find and mod:find("g9-battle-sprites")
-    local img
-    if g9 and g9.exports and type(g9.exports.frontArt) == "function" then
-      local ok, g9Img = pcall(g9.exports.frontArt, { species = species })
-      if ok then img = g9Img end
-    end
-
-    -- Keep the normal sprite pipeline as a fallback when G9 Battle Sprites is
-    -- not installed or has no sheet for the species.
-    if not img then
-      local path, trueColor = require("src.pokemon.Sprites").path(
-        speech.game.data, species, "front", { kind = "battle" }
-      )
-      local ok, fallbackImg = pcall(love.graphics.newImage, Assets.resolve(path))
-      if ok then
-        img = fallbackImg
-        speech.picTrueColor = trueColor or false
-      end
-    else
-      speech.picTrueColor = true
-    end
-
+    local img, trueColor = resolvePokemonArt(speech, species)
     speech.pic = img
     speech.picFlip = false
+    speech.picTrueColor = trueColor
+
+    -- Play the selected starter's cry exactly once when the highlighted
+    -- option changes. Do not tie this to the art load, because G9 art can be
+    -- built lazily and would otherwise retrigger the cry.
+    if menu._alternateOakLastCrySpecies ~= species then
+      menu._alternateOakLastCrySpecies = species
+      require("src.core.Sound").playCry(speech.game.data, species)
+    end
   end
 
   Menu.new = function(game, items, opts)
     local menu = originalMenuNew(game, items, opts)
-    if isStarterChoice(items) and activeStarterSpeech then
-      menu._alternateOakStarterSpeech = activeStarterSpeech
-      updateStarterPreview(menu)
+    if activeStarterSpeech and (isStarterChoice(items) or isAvatarChoice(items)) then
+      menu._alternateOakIntroChoice = true
+      if isStarterChoice(items) then
+        menu._alternateOakStarterSpeech = activeStarterSpeech
+        updateStarterPreview(menu)
+      end
     end
     return menu
   end
@@ -107,7 +121,7 @@ return function(mod)
     -- Kanto Gear renders the native starter choices on its bottom screen.
     -- Leave the native menu hidden there; the preview itself remains on the
     -- game screen above it.
-    if not (kantoGearInstalled and self._alternateOakStarterSpeech) then
+    if not (kantoGearInstalled and self._alternateOakIntroChoice) then
       originalMenuDraw(self)
     end
 
@@ -209,13 +223,10 @@ return function(mod)
     Commands.give_pokemon(ctx, species, 5, true)
     setStarterFlags(game, species)
 
-    local OakSpeech = require("src.ui.OakSpeech")
-    local img, flip, trueColor = OakSpeech.resolvePic(
-      game, { type = "pokemon", id = species }, speech
-    )
+    local img, trueColor = resolvePokemonArt(speech, species)
     speech.pic = img
-    speech.picFlip = flip or false
-    speech.picTrueColor = trueColor or false
+    speech.picFlip = false
+    speech.picTrueColor = trueColor
 
     require("src.core.Sound").playCry(game.data, species)
 
@@ -238,7 +249,7 @@ return function(mod)
               return
             end
 
-            game.stack:push(NamingScreen.new(game, {
+            local naming = NamingScreen.new(game, {
               title = require("src.core.Strings")("NICKNAME?"),
               maxLen = 10,
               mon = mon,
@@ -248,7 +259,12 @@ return function(mod)
                 end
                 done()
               end,
-            }))
+            })
+            -- Kanto Gear identifies the native Gen 1 naming surface by this
+            -- screenId. Without it, its generic level-up fallback sees the
+            -- same party Pokemon and replaces the keyboard on the bottom.
+            naming.screenId = "NamingScreen"
+            game.stack:push(naming)
           end,
         }))
       end
