@@ -11,7 +11,8 @@
   "priority": 80,
   "dependencies": [],
   "optional_dependencies": [
-    "leaf_avatar"
+    "leaf_avatar",
+    "kanto_gear"
   ],
   "conflicts": [],
   "affects_link": false,
