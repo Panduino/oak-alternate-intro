@@ -17,9 +17,27 @@ return function(mod)
   local activeStarterSpeech = nil
   local Menu = require("src.ui.Menu")
   local Assets = require("src.render.Assets")
+  -- Kanto Gear mirrors the active native choice/naming UI onto its bottom
+  -- screen. When it is installed, keep those controls off the game screen
+  -- so the upper screen can be used for the Pokemon/art itself.
+  local kantoGearInstalled = mod.find and mod.find("kanto_gear") ~= nil
   local originalMenuNew = Menu.new
   local originalMenuUpdate = Menu.update
   local originalMenuDraw = Menu.draw
+
+  local ChoiceBox = require("src.ui.ChoiceBox")
+  local originalChoiceBoxDraw = ChoiceBox.draw
+  ChoiceBox.draw = function(self)
+    if kantoGearInstalled then return end
+    return originalChoiceBoxDraw(self)
+  end
+
+  local NamingScreen = require("src.ui.NamingScreen")
+  local originalNamingScreenDraw = NamingScreen.draw
+  NamingScreen.draw = function(self)
+    if kantoGearInstalled then return end
+    return originalNamingScreenDraw(self)
+  end
 
   local function isStarterChoice(items)
     if #items ~= 3 then return false end
@@ -86,7 +104,12 @@ return function(mod)
   end
 
   Menu.draw = function(self)
-    originalMenuDraw(self)
+    -- Kanto Gear renders the native starter choices on its bottom screen.
+    -- Leave the native menu hidden there; the preview itself remains on the
+    -- game screen above it.
+    if not (kantoGearInstalled and self._alternateOakStarterSpeech) then
+      originalMenuDraw(self)
+    end
 
     local speech = self._alternateOakStarterSpeech
     local img = speech and speech.pic
@@ -98,10 +121,18 @@ return function(mod)
     local w, h = img:getDimensions()
     if w <= 0 or h <= 0 then return end
 
-    local scale = math.min(48 / w, 48 / h)
-    local x = 28 - (w * scale) / 2
-    local y = 64 - (h * scale) / 2
+    local maxW = kantoGearInstalled and 88 or 48
+    local maxH = kantoGearInstalled and 88 or 48
+    local scale = math.min(maxW / w, maxH / h)
+    local centerX = kantoGearInstalled and 80 or 28
+    local centerY = kantoGearInstalled and 44 or 64
+    local x = centerX - (w * scale) / 2
+    local y = centerY - (h * scale) / 2
 
+    -- Some G9 frames contain opaque pixels near the edge of their baked
+    -- canvas. Never allow the preview to enter the dialogue area below it.
+    local clipBottom = kantoGearInstalled and 96 or 88
+    love.graphics.setScissor(0, 0, 160, clipBottom)
     love.graphics.setColor(1, 1, 1, 1)
     if speech.picFlip then
       love.graphics.draw(img, x + w * scale, y, 0, -scale, scale)
@@ -114,6 +145,7 @@ return function(mod)
       )
     end
     love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setScissor()
   end
 
   local STARTERS = {
