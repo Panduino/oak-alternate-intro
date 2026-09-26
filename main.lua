@@ -288,6 +288,12 @@ undertaking in POKéMON history!",
     nextStep()
   end
 
+  mod.commands:register("alternate_oak_intro:despawn_rival", function(ctx)
+    local ow = ctx.overworld
+    if not ow then return end
+    despawnRival(ow, ow:npcByIndex(RIVAL_OBJECT_INDEX))
+  end)
+
   local function runFirstPalletRivalBattle(game, ow, playerX)
     if ow.runner:isRunning() then return false end
 
@@ -315,17 +321,6 @@ undertaking in POKéMON history!",
       return false
     end
 
-    local function finish()
-      if ow.map and ow.map.id == "PALLET_TOWN" then
-        despawnRival(ow, rival)
-        require("src.core.Music").playMap(
-          game.data, "PALLET_TOWN",
-          game.save.onBike,
-          ow.player and ow.player.surfing
-        )
-      end
-    end
-
     local rows = {
       { "show_text",
         "{RIVAL}! You're finally out!\\fYou overslept, didn't you?" },
@@ -334,15 +329,14 @@ undertaking in POKéMON history!",
         "_OaksLabRivalIPickedTheWrongPokemonText" },
       { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
       { "heal_party" },
+      { "alternate_oak_intro:despawn_rival" },
+      { "play_default_music" },
       { "label", "done" },
     }
 
     local function beginBattle()
-      game.save.flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE = true
-      ow.runner:run(rows, {
-        npc = rival,
-        onDone = finish,
-      })
+      require("src.core.Music").play(game.data, "Music_MeetRival")
+      ow.runner:run(rows, { npc = rival })
     end
 
     -- Match Pallet Town's vanilla Oak entrance: the Rival is initially
