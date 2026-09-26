@@ -494,8 +494,18 @@ return function(mod)
         return
       end
 
+      local mom = ow:npcByIndex(1)
+      if not mom then return end
+
+      -- The player is now standing at the bottom of the stairs when this
+      -- fires. Walk Mom to the tile directly in front of the player rather
+      -- than using her old fixed one-tile movement.
+      local targetX = ow.player.cellX
+      local targetY = ow.player.cellY + 1
+      local momPath = findPath(mom.cellX, mom.cellY, targetX, targetY)
+
       local rows = {
-        { "move_npc", 1, "down", 1 },
+        { "walk_npc", 1, momPath },
         { "face_player" },
         { "show_text",
           "Right. All kids leave home\nsomeday. It said so on TV." },
@@ -507,9 +517,6 @@ return function(mod)
         { "move_npc", 1, "up", 1 },
         { "set_flag", "MOD_ALTERNATE_INTRO_MOM_GIFT" },
       }
-
-      local mom = ow:npcByIndex(1)
-      if not mom then return false end
 
       ow.runner:run(rows, {
         npc = mom,
