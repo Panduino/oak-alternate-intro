@@ -196,6 +196,26 @@ return function(mod)
 
   local RIVAL_OBJECT_INDEX = 99
 
+  -- Match the Oak's Lab Rival battle's special loss behavior: losing this
+  -- scripted fight does not black out, and the follow-up heals the party.
+  local BattleState = require("src.battle.BattleState")
+  local originalIsOaksLabStarterRival = BattleState.isOaksLabStarterRival
+  BattleState.isOaksLabStarterRival = function(battle)
+    if battle and battle.alternateOakIntroCanLose then
+      return true
+    end
+    return originalIsOaksLabStarterRival(battle)
+  end
+
+  mod.events:on("battle.started", function(ev)
+    local battle = ev and ev.battle
+    if not battle or battle.oppClass ~= "OPP_RIVAL1" then return end
+    local flags = battle.game and battle.game.save and battle.game.save.flags or {}
+    if flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE then
+      battle.alternateOakIntroCanLose = true
+    end
+  end)
+
   -- The vanilla Pallet Town Oak encounter starts hidden at (8,5), below
   -- the player's camera, then walks up to the tile immediately below the
   -- player. Reuse that staging for the Rival so this encounter has the same
@@ -306,7 +326,7 @@ return function(mod)
 
     local rows = {
       { "show_text",
-        "{RIVAL}! You're finally out!\\fYou overslept, didn't you?" },
+        "{RIVAL}! You're finally out! You overslept, didn't you?" },
       { "show_text", "_OaksLabRivalIllTakeYouOnText" },
       { "save_end_battle_text",
         "_OaksLabRivalIPickedTheWrongPokemonText" },
