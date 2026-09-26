@@ -431,7 +431,7 @@ return function(mod)
 
     local rows = {
       { "show_text",
-        "{RIVAL}! You're finally out! You overslept, didn't you?" },
+        "{PLAYER}! You're finally out! You overslept, didn't you?" },
       { "show_text", "_OaksLabRivalIllTakeYouOnText" },
       { "save_end_battle_text",
         "_OaksLabRivalIPickedTheWrongPokemonText" },
