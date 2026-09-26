@@ -425,7 +425,7 @@ return function(mod)
       -- The saved end-battle text already handles the Rival's win line on
       -- the battle screen. This shared line is the normal post-battle exit
       -- dialogue and must play after either a win or a loss.
-      { "show_text", "_OaksLabRivalSmellYouLaterText" },
+      { "show_text", "OK! I'll make my POKéMON\nfight to toughen it up!\n{PLAYER}! Smell you later!" },
       { "alternate_oak_intro:rival_depart" },
       { "play_default_music" },
       { "label", "done" },
