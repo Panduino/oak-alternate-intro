@@ -196,15 +196,13 @@ return function(mod)
 
   local RIVAL_OBJECT_INDEX = 99
 
-  -- Match the Oak's Lab Rival battle's special loss behavior: losing this
-  -- scripted fight does not black out, and the follow-up heals the party.
+  -- This scripted Rival battle uses the same no-blackout behavior as the
+  -- vanilla Oak's Lab starter battle. The BattleState check must happen
+  -- during BattleState:enter(), before battle.started exists.
   local BattleState = require("src.battle.BattleState")
   local originalIsOaksLabStarterRival = BattleState.isOaksLabStarterRival
   BattleState.isOaksLabStarterRival = function(battle)
     if battle then
-      -- This check runs during BattleState:enter(), before battle.started is
-      -- emitted. The old marker was assigned by that later event, so a loss
-      -- could already have gone through the normal blackout path.
       local game = battle.game
       local flags = game and game.save and game.save.flags or {}
       if battle.oppClass == "OPP_RIVAL1"
@@ -217,6 +215,25 @@ return function(mod)
       end
     end
     return originalIsOaksLabStarterRival(battle)
+  end
+
+  -- Commands.start_battle calls OverworldState:afterBattle from its
+  -- completion callback. Without this matching special case, a loss on
+  -- PALLET_TOWN would still trigger the normal blackout/warp even though
+  -- BattleState correctly skipped the blackout screen above.
+  local OverworldState = require("src.world.OverworldController")
+  local originalAfterBattle = OverworldState.afterBattle
+  OverworldState.afterBattle = function(ow, result, battle)
+    if result == "lose" and battle then
+      local game = battle.game
+      local flags = game and game.save and game.save.flags or {}
+      if battle.oppClass == "OPP_RIVAL1"
+          and flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE
+          and ow.map and ow.map.id == "PALLET_TOWN" then
+        return
+      end
+    end
+    return originalAfterBattle(ow, result, battle)
   end
 
   mod.events:on("battle.started", function(ev)
@@ -405,9 +422,10 @@ return function(mod)
         "_OaksLabRivalIPickedTheWrongPokemonText" },
       { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
       { "heal_party" },
-      { "jump_if_false", "rival_depart" },
+      { "jump_if_false", "rival_exit" },
+      { "show_text", "_OaksLabRivalIPickedTheWrongPokemonText" },
+      { "label", "rival_exit" },
       { "show_text", "_OaksLabRivalSmellYouLaterText" },
-      { "label", "rival_depart" },
       { "alternate_oak_intro:rival_depart" },
       { "play_default_music" },
       { "label", "done" },
