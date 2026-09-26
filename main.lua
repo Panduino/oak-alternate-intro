@@ -294,6 +294,35 @@ undertaking in POKéMON history!",
     despawnRival(ow, ow:npcByIndex(RIVAL_OBJECT_INDEX))
   end)
 
+  -- After the battle, have the Rival step around the player and head north
+  -- toward Route 1 instead of simply vanishing. The final northward step
+  -- carries him to the edge of Pallet Town, where he is despawned after
+  -- leaving the player's view.
+  mod.commands:register("alternate_oak_intro:rival_depart", function(ctx)
+    local ow = ctx.overworld
+    local runner = ctx.runner
+    if not ow then return end
+
+    local rival = ow:npcByIndex(RIVAL_OBJECT_INDEX)
+    if not rival then return end
+
+    local side = rival.cellX <= ow.player.cellX and "right" or "left"
+    local steps = { side, "up", "up" }
+    local i = 0
+    local function nextStep()
+      i = i + 1
+      if not steps[i] then
+        despawnRival(ow, rival)
+        runner:resume()
+        return
+      end
+      ow:scriptMove(rival, steps[i], 1, nextStep)
+    end
+
+    nextStep()
+    runner:yield()
+  end)
+
   local function runFirstPalletRivalBattle(game, ow, playerX)
     if ow.runner:isRunning() then return false end
 
@@ -329,7 +358,7 @@ undertaking in POKéMON history!",
         "_OaksLabRivalIPickedTheWrongPokemonText" },
       { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
       { "heal_party" },
-      { "alternate_oak_intro:despawn_rival" },
+      { "alternate_oak_intro:rival_depart" },
       { "play_default_music" },
       { "label", "done" },
     }
