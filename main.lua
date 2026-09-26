@@ -35,15 +35,33 @@ return function(mod)
     local species = ({ "BULBASAUR", "CHARMANDER", "SQUIRTLE" })[menu.index]
     if not species then return end
 
-    local path, trueColor = require("src.pokemon.Sprites").path(
-      speech.game.data, species, "front", { kind = "battle" }
-    )
-    local ok, img = pcall(love.graphics.newImage, Assets.resolve(path))
-    if not ok then img = nil end
+    -- G9 Battle Sprites does not expose its animated battle art through
+    -- pokemon.sprite. It exposes the already-baked front frame through
+    -- mod.exports.frontArt, so use that when the mod is installed.
+    local g9 = mod.find and mod:find("g9-battle-sprites")
+    local img
+    if g9 and g9.exports and type(g9.exports.frontArt) == "function" then
+      local ok, g9Img = pcall(g9.exports.frontArt, { species = species })
+      if ok then img = g9Img end
+    end
+
+    -- Keep the normal sprite pipeline as a fallback when G9 Battle Sprites is
+    -- not installed or has no sheet for the species.
+    if not img then
+      local path, trueColor = require("src.pokemon.Sprites").path(
+        speech.game.data, species, "front", { kind = "battle" }
+      )
+      local ok, fallbackImg = pcall(love.graphics.newImage, Assets.resolve(path))
+      if ok then
+        img = fallbackImg
+        speech.picTrueColor = trueColor or false
+      end
+    else
+      speech.picTrueColor = true
+    end
 
     speech.pic = img
     speech.picFlip = false
-    speech.picTrueColor = img and trueColor or false
   end
 
   Menu.new = function(game, items, opts)
@@ -58,8 +76,12 @@ return function(mod)
   Menu.update = function(self, dt)
     local previousIndex = self.index
     originalMenuUpdate(self, dt)
-    if self._alternateOakStarterSpeech and self.index ~= previousIndex then
-      updateStarterPreview(self)
+    if self._alternateOakStarterSpeech then
+      -- G9 Battle Sprites builds its front frame lazily, so retry even when
+      -- the selection index has not changed.
+      if self.index ~= previousIndex or not self._alternateOakStarterSpeech.pic then
+        updateStarterPreview(self)
+      end
     end
   end
 
