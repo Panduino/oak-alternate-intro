@@ -422,9 +422,9 @@ return function(mod)
         "_OaksLabRivalIPickedTheWrongPokemonText" },
       { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
       { "heal_party" },
-      { "jump_if_false", "rival_exit" },
-      { "show_text", "_OaksLabRivalIPickedTheWrongPokemonText" },
-      { "label", "rival_exit" },
+      -- The saved end-battle text already handles the Rival's win line on
+      -- the battle screen. This shared line is the normal post-battle exit
+      -- dialogue and must play after either a win or a loss.
       { "show_text", "_OaksLabRivalSmellYouLaterText" },
       { "alternate_oak_intro:rival_depart" },
       { "play_default_music" },
