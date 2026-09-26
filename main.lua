@@ -488,7 +488,7 @@ return function(mod)
         game = game,
         save = game.save,
         overworld = ow,
-      }, "OAKS_LAB", "OAKSLAB_OAK")
+      }, "OAKS_LAB", "OAKSLAB_OAK1")
 
       -- The alternate intro's Rival battle already happened outside Pallet
       -- Town. He should not remain in the lab or trigger the vanilla lab battle.
