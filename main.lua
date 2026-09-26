@@ -336,7 +336,11 @@ return function(mod)
   end)
 
   mod.events:on("intro.oak_speech.step", function(ev)
-    if ev.step and ev.step.id == "alternate_intro_starter_choice" then
+    -- Leaf Avatar's boy/girl choice is another native Menu instance in the
+    -- same intro. Keep its speech active long enough for Kanto Gear to own
+    -- that menu on the bottom screen too.
+    if ev.step and (ev.step.id == "alternate_intro_starter_choice"
+        or ev.step.id == "leaf_avatar_pick") then
       activeStarterSpeech = ev.speech
     else
       activeStarterSpeech = nil
