@@ -201,8 +201,20 @@ return function(mod)
   local BattleState = require("src.battle.BattleState")
   local originalIsOaksLabStarterRival = BattleState.isOaksLabStarterRival
   BattleState.isOaksLabStarterRival = function(battle)
-    if battle and battle.alternateOakIntroCanLose then
-      return true
+    if battle then
+      -- This check runs during BattleState:enter(), before battle.started is
+      -- emitted. The old marker was assigned by that later event, so a loss
+      -- could already have gone through the normal blackout path.
+      local game = battle.game
+      local flags = game and game.save and game.save.flags or {}
+      if battle.oppClass == "OPP_RIVAL1"
+          and flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE
+          and BattleState.currentMapId(battle) == "PALLET_TOWN" then
+        return true
+      end
+      if battle.alternateOakIntroCanLose then
+        return true
+      end
     end
     return originalIsOaksLabStarterRival(battle)
   end
