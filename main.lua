@@ -484,6 +484,16 @@ return function(mod)
     end,
   })
 
+  -- The Town Map is now given during Mom's scene, so Daisy should
+  -- never offer or explain the map. Keep her normal fallback dialogue.
+  mod.content.map_scripts:register("BLUES_HOUSE", {
+    talk = {
+      TEXT_BLUESHOUSE_DAISY_SITTING = {
+        { "show_text", "_BluesHouseDaisyRivalAtLabText" },
+      },
+    },
+  })
+
   mod.content.map_scripts:register("REDS_HOUSE_1F", {
     -- Fire as soon as the player enters the first floor from the bedroom,
     -- so the Mom scene cannot be missed while walking off the stairs.
