@@ -500,9 +500,12 @@ return function(mod)
       -- The player is now standing at the bottom of the stairs when this
       -- fires. Walk Mom to the tile directly in front of the player rather
       -- than using her old fixed one-tile movement.
+      local originalMomX = mom.cellX
+      local originalMomY = mom.cellY
       local targetX = ow.player.cellX
       local targetY = ow.player.cellY + 1
       local momPath = findPath(mom.cellX, mom.cellY, targetX, targetY)
+      local returnPath = findPath(targetX, targetY, originalMomX, originalMomY)
 
       local rows = {
         { "walk_npc", 1, momPath },
@@ -514,7 +517,7 @@ return function(mod)
         { "give_item", "POKE_BALL", 10, false },
         { "show_text",
           "{PLAYER} got 10 POKé BALLs!Use them to catch\nWILD POKéMON!" },
-        { "move_npc", 1, "up", 1 },
+        { "walk_npc", 1, returnPath },
         { "set_flag", "MOD_ALTERNATE_INTRO_MOM_GIFT" },
       }
 
