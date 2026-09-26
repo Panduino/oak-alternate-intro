@@ -359,14 +359,29 @@ return function(mod)
     if not ow or not rival then return end
 
     local playerX = ow.player.cellX
-    local side = playerX <= 8 and "right" or "left"
-    local sideX = playerX + (side == "right" and 1 or -1)
+    local playerY = ow.player.cellY
 
-    -- If the first side is outside the map, use the other side instead.
-    if not ow.map:inBounds(sideX, 1) then
-      side = side == "right" and "left" or "right"
-      sideX = playerX + (side == "right" and 1 or -1)
+    -- Pick the side that actually leads into the walkable corridor above
+    -- the player. This keeps the Rival from stepping onto the wall when
+    -- the player is standing on the left-hand Route 1 exit grass.
+    local preferredSide = playerX <= 8 and "right" or "left"
+    local sides = { preferredSide, preferredSide == "right" and "left" or "right" }
+    local side
+
+    for _, candidate in ipairs(sides) do
+      local sideX = playerX + (candidate == "right" and 1 or -1)
+      if ow.map:inBounds(sideX, playerY)
+          and ow.map:isWalkableCell(sideX, playerY)
+          and ow.map:inBounds(sideX, 1)
+          and ow.map:isWalkableCell(sideX, 1) then
+        side = candidate
+        break
+      end
     end
+
+    -- Fall back to the original side choice if neither route can be
+    -- identified as walkable.
+    side = side or preferredSide
 
     local steps = { side, "up", "up", "up", "up", "up" }
     local runner = ctx.runner
