@@ -368,7 +368,7 @@ return function(mod)
       sideX = playerX + (side == "right" and 1 or -1)
     end
 
-    local steps = { side, "up", "up" }
+    local steps = { side, "up", "up", "up", "up", "up" }
     local runner = ctx.runner
     local i = 0
 
