@@ -8,6 +8,90 @@
 -- sprite override path used by compatible mods.
 
 return function(mod)
+
+  -- The stock OakSpeech choice uses the generic Menu widget. The widget
+  -- does not have a per-item preview API, so this mod adds a narrowly scoped
+  -- preview to the three-starter menu only. The sprite itself is resolved
+  -- through OakSpeech.resolvePic -> pokemon.Sprites.path, so pokemon.sprite
+  -- hooks from other mods remain in the chain.
+  local activeStarterSpeech = nil
+  local Menu = require("src.ui.Menu")
+  local originalMenuNew = Menu.new
+  local originalMenuUpdate = Menu.update
+  local originalMenuDraw = Menu.draw
+
+  local function isStarterChoice(items)
+    if #items ~= 3 then return false end
+    return items[1] and items[1].label == "BULBASAUR"
+      and items[2] and items[2].label == "CHARMANDER"
+      and items[3] and items[3].label == "SQUIRTLE"
+  end
+
+  local function updateStarterPreview(menu)
+    local speech = menu._alternateOakStarterSpeech
+    if not speech then return end
+
+    local species = ({ "BULBASAUR", "CHARMANDER", "SQUIRTLE" })[menu.index]
+    if not species then return end
+
+    local OakSpeech = require("src.ui.OakSpeech")
+    local img, flip, trueColor = OakSpeech.resolvePic(
+      speech.game, { type = "pokemon", id = species }, speech
+    )
+
+    speech.pic = img
+    speech.picFlip = flip or false
+    speech.picTrueColor = trueColor or false
+  end
+
+  Menu.new = function(game, items, opts)
+    local menu = originalMenuNew(game, items, opts)
+    if isStarterChoice(items) and activeStarterSpeech then
+      menu._alternateOakStarterSpeech = activeStarterSpeech
+      updateStarterPreview(menu)
+    end
+    return menu
+  end
+
+  Menu.update = function(self, dt)
+    local previousIndex = self.index
+    originalMenuUpdate(self, dt)
+    if self._alternateOakStarterSpeech and self.index ~= previousIndex then
+      updateStarterPreview(self)
+    end
+  end
+
+  Menu.draw = function(self)
+    originalMenuDraw(self)
+
+    local speech = self._alternateOakStarterSpeech
+    local img = speech and speech.pic
+    if not img then return end
+
+    -- The normal 56x56 OakSpeech picture area is behind the choice box.
+    -- Move the preview into the open left-hand area and scale it to 48x48
+    -- so the actual resolved front sprite remains visible beside the menu.
+    local w, h = img:getDimensions()
+    if w <= 0 or h <= 0 then return end
+
+    local scale = math.min(48 / w, 48 / h)
+    local x = 28 - (w * scale) / 2
+    local y = 64 - (h * scale) / 2
+
+    love.graphics.setColor(1, 1, 1, 1)
+    if speech.picFlip then
+      love.graphics.draw(img, x + w * scale, y, 0, -scale, scale)
+    else
+      love.graphics.draw(img, x, y, 0, scale, scale)
+    end
+    if speech.picTrueColor then
+      require("src.render.PaletteFX").markTrueColor(
+        x, y, w * scale, h * scale
+      )
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+  end
+
   local STARTERS = {
     BULBASAUR = {
       rival = "CHARMANDER",
@@ -126,9 +210,9 @@ return function(mod)
       text = "Before you leave,\nyou should have a\nPOKéMON of your own!\fI have three wonderful\nPOKéMON here for you.\nWhich one would you like?",
       choices = { "BULBASAUR", "CHARMANDER", "SQUIRTLE" },
       values = { "BULBASAUR", "CHARMANDER", "SQUIRTLE" },
-      tx = 4,
+      tx = 7,
       ty = 4,
-      tw = 12,
+      tw = 13,
     })
 
     mod.ui.insertStepAfter(steps, "alternate_intro_starter_choice", {
@@ -177,6 +261,14 @@ return function(mod)
     })
 
     return steps
+  end)
+
+  mod.events:on("intro.oak_speech.step", function(ev)
+    if ev.step and ev.step.id == "alternate_intro_starter_choice" then
+      activeStarterSpeech = ev.speech
+    else
+      activeStarterSpeech = nil
+    end
   end)
 
   mod.events:on("intro.oak_speech.answered", function(ev)
