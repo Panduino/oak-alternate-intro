@@ -321,6 +321,43 @@ return function(mod)
     despawnRival(ow, ow:npcByIndex(RIVAL_OBJECT_INDEX))
   end)
 
+  -- Match the vanilla OaksLabRivalStartsExitScript: after the battle the
+  -- Rival says his parting line, sidesteps around the player, walks toward
+  -- the Route 1 exit, then disappears off the Pallet Town map.
+  mod.commands:register("alternate_oak_intro:rival_depart", function(ctx)
+    local ow = ctx.overworld
+    local rival = ow and ow:npcByIndex(RIVAL_OBJECT_INDEX)
+    if not ow or not rival then return end
+
+    local playerX = ow.player.cellX
+    local side = playerX <= 8 and "right" or "left"
+    local sideX = playerX + (side == "right" and 1 or -1)
+
+    -- If the first side is outside the map, use the other side instead.
+    if not ow.map:inBounds(sideX, 1) then
+      side = side == "right" and "left" or "right"
+      sideX = playerX + (side == "right" and 1 or -1)
+    end
+
+    local steps = { side, "up", "up" }
+    local runner = ctx.runner
+    local i = 0
+
+    local function step()
+      i = i + 1
+      if not steps[i] then
+        despawnRival(ow, rival)
+        runner:resume()
+        return
+      end
+      ow:scriptMove(rival, steps[i], 1, step)
+    end
+
+    rival.facing = side
+    step()
+    runner:yield()
+  end)
+
   local function runFirstPalletRivalBattle(game, ow, playerX)
     if ow.runner:isRunning() then return false end
 
