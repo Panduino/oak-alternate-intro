@@ -213,6 +213,30 @@ return function(mod)
     local flags = battle.game and battle.game.save and battle.game.save.flags or {}
     if flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE then
       battle.alternateOakIntroCanLose = true
+
+      -- Keep the scripted opening battle gentle even when other mods change
+      -- the starters' normal level-up moves. The Rival may only use the
+      -- basic attack plus a basic stat-lowering move.
+      local starter = mod.save:get("starter")
+      local movePair = ({
+        BULBASAUR = {
+          { id = "TACKLE", pp = 35 },
+          { id = "GROWL", pp = 40 },
+        },
+        CHARMANDER = {
+          { id = "SCRATCH", pp = 35 },
+          { id = "GROWL", pp = 40 },
+        },
+        SQUIRTLE = {
+          { id = "TACKLE", pp = 35 },
+          { id = "LEER", pp = 30 },
+        },
+      })[starter]
+
+      if movePair and battle.enemy and battle.enemy.mon then
+        battle.enemy.mon.moves = movePair
+        battle.enemy.curMoves = battle.enemy.mon.moves
+      end
     end
   end)
 
