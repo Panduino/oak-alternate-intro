@@ -517,6 +517,10 @@ return function(mod)
         { "give_item", "POKE_BALL", 10, false },
         { "show_text",
           "{PLAYER} got 10 POKé BALLs!Use them to catch\nWILD POKéMON!" },
+        { "give_item", "TOWN_MAP", 1, false },
+        { "show_text",
+          "{PLAYER} got a TOWN MAP!\fIt shows the towns and\ncities of KANTO." },
+        { "set_flag", "EVENT_GOT_TOWN_MAP" },
         { "walk_npc", 1, returnPath },
         { "set_flag", "MOD_ALTERNATE_INTRO_MOM_GIFT" },
       }
