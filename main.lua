@@ -16,6 +16,7 @@ return function(mod)
   -- hooks from other mods remain in the chain.
   local activeStarterSpeech = nil
   local Menu = require("src.ui.Menu")
+  local Assets = require("src.render.Assets")
   local originalMenuNew = Menu.new
   local originalMenuUpdate = Menu.update
   local originalMenuDraw = Menu.draw
@@ -34,14 +35,15 @@ return function(mod)
     local species = ({ "BULBASAUR", "CHARMANDER", "SQUIRTLE" })[menu.index]
     if not species then return end
 
-    local OakSpeech = require("src.ui.OakSpeech")
-    local img, flip, trueColor = OakSpeech.resolvePic(
-      speech.game, { type = "pokemon", id = species }, speech
+    local path, trueColor = require("src.pokemon.Sprites").path(
+      speech.game.data, species, "front", { kind = "battle" }
     )
+    local ok, img = pcall(love.graphics.newImage, Assets.resolve(path))
+    if not ok then img = nil end
 
     speech.pic = img
-    speech.picFlip = flip or false
-    speech.picTrueColor = trueColor or false
+    speech.picFlip = false
+    speech.picTrueColor = img and trueColor or false
   end
 
   Menu.new = function(game, items, opts)
