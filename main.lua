@@ -474,6 +474,24 @@ return function(mod)
     return true
   end
 
+  -- The alternate intro completes Oak's opening sequence for the player,
+  -- so Oak should remain in his lab afterward just as he would after the
+  -- normal Pokédex handoff. This also leaves his normal dialogue active,
+  -- including the Pokédex progress rating.
+  mod.content.map_scripts:register("OAKS_LAB", {
+    onEnter = function(game, ow)
+      local flags = game.save.flags or {}
+      if not flags.EVENT_GOT_POKEDEX then return end
+
+      local Commands = require("src.script.Commands")
+      Commands.show_object({
+        game = game,
+        save = game.save,
+        overworld = ow,
+      }, "OAKS_LAB", "OAKSLAB_OAK")
+    end,
+  })
+
   mod.content.map_scripts:register("PALLET_TOWN", {
     onStep = function(game, ow, x, y)
       -- Red's Route 1 exit is y == 1. The encounter is armed only after
