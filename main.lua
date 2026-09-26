@@ -485,13 +485,14 @@ return function(mod)
   })
 
   mod.content.map_scripts:register("REDS_HOUSE_1F", {
-    onStep = function(game, ow, x, y)
+    -- Fire as soon as the player enters the first floor from the bedroom,
+    -- so the Mom scene cannot be missed while walking off the stairs.
+    onEnter = function(game, ow)
       local flags = game.save.flags or {}
-      if flags.MOD_ALTERNATE_INTRO_MOM_GIFT then return false end
+      if flags.MOD_ALTERNATE_INTRO_MOM_GIFT then return end
       if not mod.save:get("starter") or not flags.EVENT_GOT_STARTER then
-        return false
+        return
       end
-      if x ~= 5 or y ~= 6 then return false end
 
       local rows = {
         { "move_npc", 1, "down", 1 },
@@ -513,7 +514,6 @@ return function(mod)
       ow.runner:run(rows, {
         npc = mom,
       })
-      return true
     end,
   })
 end
