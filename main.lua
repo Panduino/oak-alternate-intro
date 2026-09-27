@@ -584,6 +584,12 @@ return function(mod)
     ow.player.facing = "down"
 
     local rival = spawnRival(ow, game)
+
+    -- Start the Rival encounter music as soon as he appears, before his
+    -- entrance walk begins. The battle music should not wait until he reaches
+    -- the player.
+    require("src.core.Music").play(game.data, "Music_MeetRival")
+
     local starter = mod.save:get("starter")
     local rivalSpecies = STARTERS[starter] and STARTERS[starter].rival
     local rivalParty = ({
@@ -615,7 +621,6 @@ return function(mod)
     }
 
     local function beginBattle()
-      require("src.core.Music").play(game.data, "Music_MeetRival")
       ow.runner:run(rows, { npc = rival })
     end
 
