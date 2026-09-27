@@ -719,14 +719,17 @@ return function(mod)
       local rows = {
         { "walk_npc", 1, momPath },
         { "face_player" },
+        { "face_player" },
         { "show_text",
           "Right. All kids leave home\nsomeday. It said so on TV." },
         { "show_text",
           "I've packed some fresh\nunderwear for you, too.You'll need to be prepared\nfor your journey!" },
         { "give_item", "POKE_BALL", 10, false },
+        { "play_sound", "Get_Item1" },
         { "show_text",
           "{PLAYER} got 10 POKé BALLs!Use them to catch\nWILD POKéMON!" },
         { "give_item", "TOWN_MAP", 1, false },
+        { "play_sound", "Get_Key_Item" },
         { "show_text",
           "{PLAYER} got a TOWN MAP!\fIt shows the towns and\ncities of KANTO." },
         { "set_flag", "EVENT_GOT_TOWN_MAP" },
