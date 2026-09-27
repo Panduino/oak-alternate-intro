@@ -719,7 +719,7 @@ return function(mod)
       local rows = {
         { "walk_npc", 1, momPath },
         { "face_player" },
-        { "face_player" },
+        { "face_player_dir", "down" },
         { "show_text",
           "Right. All kids leave home\nsomeday. It said so on TV." },
         { "show_text",
