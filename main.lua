@@ -725,11 +725,9 @@ return function(mod)
         { "show_text",
           "I've packed some fresh\nunderwear for you, too.You'll need to be prepared\nfor your journey!" },
         { "give_item", "POKE_BALL", 10, false },
-        { "play_sound", "Get_Item1" },
         { "show_text",
           "{PLAYER} got 10 POKé BALLs!" },
         { "give_item", "TOWN_MAP", 1, false },
-        { "play_sound", "Get_Key_Item" },
         { "show_text",
           "{PLAYER} got a TOWN MAP!" },
         { "set_flag", "EVENT_GOT_TOWN_MAP" },
