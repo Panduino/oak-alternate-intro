@@ -1,6 +1,6 @@
 {
-  "id": "alternate_oak_intro_hgss",
-  "name": "Alternate Oak Intro + HGSS Encounters",
+  "id": "hgss_time_of_day",
+  "name": "HGSS Time of Day",
   "version": "1.0.0",
   "api": 2,
   "entry": "main.lua",
@@ -10,11 +10,8 @@
   "game_version": ">=0.0.0-0 <2.0.0",
   "priority": 80,
   "dependencies": ["national_dex"],
-  "optional_dependencies": [
-    "leaf_avatar",
-    "kanto_gear"
-  ],
+  "optional_dependencies": [],
   "conflicts": [],
   "affects_link": false,
-  "description": "Replaces the early-game Oak sequence with an alternate starter-focused intro and adds an HGSS-style system-clock encounter layer."
+  "description": "Adds a system-clock HGSS-style time-of-day cycle and dynamic wild encounters to Gen 1 Recomp."
 }
