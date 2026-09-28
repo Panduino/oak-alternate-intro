@@ -1,6 +1,6 @@
 {
-  "id": "alternate_oak_intro",
-  "name": "Alternate Oak Intro",
+  "id": "alternate_oak_intro_hgss",
+  "name": "Alternate Oak Intro + HGSS Encounters",
   "version": "1.0.0",
   "api": 2,
   "entry": "main.lua",
