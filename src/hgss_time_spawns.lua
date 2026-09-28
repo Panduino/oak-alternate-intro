@@ -166,6 +166,7 @@ local function speciesAvailable(dex, species)
 end
 
 local function filterRows(dex, rows)
+  if not dex then return rows or {} end
   local out = {}
   for _, row in ipairs(rows or {}) do
     if speciesAvailable(dex, row.species) then
@@ -178,9 +179,8 @@ end
 function M.install(mod)
   local dex = nationalDex(mod)
   if not dex then
-    mod.log:warn("HGSS time-of-day spawns require the National Dex mod's "
-      .. "read API; no encounter tables were changed")
-    return
+    mod.log:warn("HGSS time-of-day spawns could not find National Dex; "
+      .. "running encounter tables without availability filtering")
   end
 
   local Palettes = loadClock()
@@ -237,25 +237,27 @@ function M.install(mod)
     return name
   end)
 
-  mod.hooks:wrap("encounter.roll", function(next, encDef, ctx)
-    local base = next(encDef, ctx.rng)
-    if not base or not ctx then return base end
+  -- Rewrite only the species after the vanilla encounter roll succeeds. This
+  -- preserves the ROM's encounter rate/step RNG while replacing its slot with
+  -- the HGSS time-of-day table.
+  mod.hooks:wrap("encounter.species", function(next, enc, ctx)
+    enc = next(enc, ctx)
+    if not enc or not ctx then return enc end
 
     local map = TEST_TABLES[ctx.mapId]
-    if not map then return base end
+    if not map then return enc end
 
     local period = currentPeriod(Palettes)
-
+    local rows
     if ctx.terrain == "grass" and map.grass then
-      local rows = map.grass[period]
-      local picked = weightedPick(filterRows(dex, rows), ctx.rng)
-      if picked then return picked end
+      rows = map.grass[period]
     elseif ctx.terrain == "water" and map.water then
-      local picked = weightedPick(filterRows(dex, map.water), ctx.rng)
-      if picked then return picked end
+      rows = map.water
     end
 
-    return base
+    local picked = weightedPick(filterRows(dex, rows), ctx.rng)
+    if picked then return picked end
+    return enc
   end)
 
   -- Fishing is separate from encounter.roll in Gen 1. Replace only the
