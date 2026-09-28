@@ -1,8 +1,7 @@
 -- HGSS-style time-of-day wild encounter layer for Gen 1.
 --
--- The clock is the engine's Gen 2 Clock.lua, so this does not create a second
--- RTC implementation. Gen 1 reads the host clock directly through that same
--- clock and uses its MORN/DAY/NITE periods.
+-- The time-of-day period follows the host/system clock directly and uses the
+-- same MORN/DAY/NITE boundaries as the engine's Gen 2 palette system.
 --
 -- Encounter selection is deliberately a hook over the existing Gen 1 tables:
 -- the vanilla encounter-rate roll still decides whether a step produces a
@@ -282,7 +281,7 @@ function M.install(mod)
   end)
 
   mod.exports.timeOfDay = function()
-    return currentPeriod(mod.game, Clock)
+    return currentPeriod(Palettes)
   end
 
   mod.exports.encounterTables = TEST_TABLES
