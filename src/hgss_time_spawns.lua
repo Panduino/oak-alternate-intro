@@ -209,22 +209,21 @@ function M.install(mod)
     CINNABAR = true, INDIGO = true, SAFFRON = true, ROUTE = true,
   }
 
+  -- Register raw four-color palettes. This is the same registry shape used
+  -- by the engine's palette tests and guarantees PaletteFX can resolve the
+  -- returned names as actual world palettes.
   mod.content.palettes:register("HGSS_MORNING", {
-    colors = {
-      { r = 248, g = 248, b = 240 },
-      { r = 184, g = 200, b = 184 },
-      { r = 104, g = 128, b = 112 },
-      { r = 40, g = 64, b = 56 },
-    },
+    { 248, 248, 240 },
+    { 184, 200, 184 },
+    { 104, 128, 112 },
+    { 40, 64, 56 },
   })
 
   mod.content.palettes:register("HGSS_NIGHT", {
-    colors = {
-      { r = 176, g = 184, b = 208 },
-      { r = 104, g = 112, b = 152 },
-      { r = 56, g = 64, b = 104 },
-      { r = 16, g = 24, b = 48 },
-    },
+    { 176, 184, 208 },
+    { 104, 112, 152 },
+    { 56, 64, 104 },
+    { 16, 24, 48 },
   })
 
   mod.hooks:wrap("map.palette", function(next, name, map, ctx)
