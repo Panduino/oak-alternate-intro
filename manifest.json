@@ -9,12 +9,12 @@
   "games": ["gen1"],
   "game_version": ">=0.0.0-0 <2.0.0",
   "priority": 80,
-  "dependencies": [],
+  "dependencies": ["national_dex"],
   "optional_dependencies": [
     "leaf_avatar",
     "kanto_gear"
   ],
   "conflicts": [],
   "affects_link": false,
-  "description": "Replaces the early-game Oak sequence with an alternate starter-focused intro."
+  "description": "Replaces the early-game Oak sequence with an alternate starter-focused intro and adds an HGSS-style system-clock encounter layer."
 }
