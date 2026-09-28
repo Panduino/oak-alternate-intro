@@ -1,3 +1,5 @@
-# Alternate Intro
+# HGSS Time of Day
 
-A mod for Gen1Recomp that replaces the standard early-game introduction with an alternate intro where you choose your starter Pokémon during Oak's introduction and get started right on your journey.
+Standalone Gen 1 Recomp mod adding an HGSS-style system-clock time-of-day cycle and dynamic wild encounters.
+
+This branch is independent of the repository's previous alternate-intro implementation.
