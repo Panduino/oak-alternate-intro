@@ -136,20 +136,20 @@ local function weightedPick(rows, random)
 end
 
 local function loadClock()
-  local ok, Clock = pcall(require, "src.core.gen2.Clock")
-  if ok and type(Clock) == "table" then return Clock end
+  local ok, Palettes = pcall(require, "src.world.gen2.Palettes")
+  if ok and type(Palettes) == "table" then return Palettes end
   return nil
 end
 
-local function currentPeriod(game, Clock)
-  if not Clock or not game then return "DAY" end
-  local ok, hour = pcall(Clock.hour, game.save)
-  if not ok or type(hour) ~= "number" then return "DAY" end
+local function currentPeriod(Palettes)
+  if not Palettes then return "DAY" end
 
-  -- Clock.daytimeLabel uses the engine's Palettes.clockDaytime boundaries.
-  local Palettes = require("src.world.gen2.Palettes")
-  local okTod, tod = pcall(Palettes.clockDaytime, hour)
-  if okTod and PERIODS[tod] then return tod end
+  -- HGSS-style mode is tied directly to the host/system clock. Do not use
+  -- the Gen 2 save-time anchor here: this mod intentionally follows the
+  -- computer clock.
+  local hour = tonumber(os.date("%H")) or 12
+  local ok, tod = pcall(Palettes.clockDaytime, hour)
+  if ok and PERIODS[tod] then return tod end
   return "DAY"
 end
 
@@ -184,9 +184,9 @@ function M.install(mod)
     return
   end
 
-  local Clock = loadClock()
-  if not Clock then
-    mod.log:error("HGSS time-of-day spawns could not load Gen 2 Clock.lua")
+  local Palettes = loadClock()
+  if not Palettes then
+    mod.log:error("HGSS time-of-day spawns could not load Gen 2 time-of-day palettes")
     return
   end
 
@@ -195,21 +195,57 @@ function M.install(mod)
   mod.hooks:wrap("world.tod", function(next, tod, ctx)
     local game = mod.game
     if not game and ctx then game = ctx.game end
-    local period = currentPeriod(game, Clock)
+    local period = currentPeriod(Palettes)
     if period == "MORN" or period == "DAY" or period == "NITE" then
       return period
     end
     return next(tod, ctx)
   end)
 
+  -- G/S/C-style field tint. The engine applies the selected named palette
+  -- to the overworld; dialogue/UI remain on their normal palette.
+  local OUTDOOR = {
+    PALLET = true, VIRIDIAN = true, PEWTER = true, CERULEAN = true,
+    LAVENDER = true, VERMILION = true, CELADON = true, FUCHSIA = true,
+    CINNABAR = true, INDIGO = true, SAFFRON = true, ROUTE = true,
+  }
+
+  mod.content.palettes:register("HGSS_MORNING", {
+    colors = {
+      { r = 248, g = 248, b = 240 },
+      { r = 184, g = 200, b = 184 },
+      { r = 104, g = 128, b = 112 },
+      { r = 40, g = 64, b = 56 },
+    },
+  })
+
+  mod.content.palettes:register("HGSS_NIGHT", {
+    colors = {
+      { r = 176, g = 184, b = 208 },
+      { r = 104, g = 112, b = 152 },
+      { r = 56, g = 64, b = 104 },
+      { r = 16, g = 24, b = 48 },
+    },
+  })
+
+  mod.hooks:wrap("map.palette", function(next, name, map, ctx)
+    name = next(name, map, ctx)
+    if not OUTDOOR[name] then return name end
+
+    local tod = ctx and ctx.tod
+    if tod == "NITE" then return "HGSS_NIGHT" end
+    if tod == "MORN" then return "HGSS_MORNING" end
+    return name
+  end)
+
   mod.hooks:wrap("encounter.roll", function(next, encDef, ctx)
-    local base = next(encDef, ctx)
+    local base = next(encDef, ctx.rng)
     if not base or not ctx then return base end
 
     local map = TEST_TABLES[ctx.mapId]
     if not map then return base end
 
-    local period = currentPeriod(mod.game, Clock)
+    local period = currentPeriod(Palettes)
 
     if ctx.terrain == "grass" and map.grass then
       local rows = map.grass[period]
@@ -232,13 +268,17 @@ function M.install(mod)
       return next(rod, mapId, pool)
     end
 
-    local period = currentPeriod(mod.game, Clock)
+    local period = currentPeriod(Palettes)
     local rows = map.fishing[rod] or map.fishing.all
     if type(rows) == "table" and rows[period] then rows = rows[period] end
     rows = filterRows(dex, rows)
 
     if #rows == 0 then return next(rod, mapId, pool) end
     return next(rod, mapId, rows)
+  end)
+
+  mod.events:on("world.tod_changed", function(ev)
+    mod.log:info("HGSS time of day -> %s", tostring(ev.tod))
   end)
 
   mod.exports.timeOfDay = function()
