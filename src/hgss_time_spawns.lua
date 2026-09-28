@@ -359,8 +359,14 @@ function M.install(mod)
 
     if ow then
       rebuildMap(ow.map)
+
+      -- Gen 1 neighbor rows carry map definitions, not live Map objects.
+      -- Re-fetch their cached runtime maps so their TileRenderers also drop
+      -- the atlas they were holding before the clock transition.
+      local MapLoader = require("src.world.MapLoader")
       for _, entry in ipairs(ow.neighbors or {}) do
-        if entry and entry.map then rebuildMap(entry.map) end
+        local id = entry and entry.map and entry.map.id
+        if id then rebuildMap(MapLoader.cached(id)) end
       end
     end
 
