@@ -191,11 +191,18 @@ function M.install(mod)
     return
   end
 
+  -- Keep our own live Game reference. mod.game is not the sanctioned runtime
+  -- access path; the engine exposes it through game.ready.
+  local game = nil
+  local lastPeriod = currentPeriod(Palettes)
+
+  mod.events:on("game.ready", function(ev)
+    game = ev.game
+  end)
+
   -- Gen 1 has no native time-of-day. The shared world.tod seam is the
   -- authoritative answer used by the rest of the engine.
   mod.hooks:wrap("world.tod", function(next, tod, ctx)
-    local game = mod.game
-    if not game and ctx then game = ctx.game end
     local period = currentPeriod(Palettes)
     if period == "MORN" or period == "DAY" or period == "NITE" then
       return period
@@ -326,18 +333,48 @@ function M.install(mod)
     return next(rod, mapId, rows)
   end)
 
-  mod.events:on("world.tod_changed", function(ev)
-    mod.log:info("HGSS time of day -> %s", tostring(ev.tod))
+  -- The Gen 1 world.tod hook is cached by the overworld. It is not polled
+  -- every frame, so a host-clock transition can otherwise sit invisible until
+  -- some unrelated palette lookup happens. world.stepped is the cheap live
+  -- heartbeat; use it only to detect a period boundary.
+  mod.events:on("world.stepped", function()
+    local period = currentPeriod(Palettes)
+    if period == lastPeriod then return end
+    local previous = lastPeriod
+    lastPeriod = period
+    mod.log:info("HGSS time of day -> %s (from %s)", period, previous)
 
-    -- ADVANCED bakes the 8 world palette groups into the tileset atlas.
-    -- Rebuild the current map when the real clock crosses a boundary so an
-    -- already-open map changes immediately rather than waiting for a warp.
-    local game = mod.game
+    -- The Advanced renderer bakes world groups into TileRenderer's atlas.
+    -- Flush that atlas and rebuild every live map renderer so the new grade
+    -- is actually drawn on the already-open screen.
+    local TileRenderer = require("src.render.TileRenderer")
+    TileRenderer.invalidate()
+
     local ow = game and game.overworld
-    if ow and ow.map and ow.map.renderer
-        and type(ow.map.renderer.rebuild) == "function" then
-      ow.map.renderer:rebuild()
+    local function rebuildMap(m)
+      if m and m.renderer and type(m.renderer.rebuild) == "function" then
+        m.renderer:rebuild()
+      end
     end
+
+    if ow then
+      rebuildMap(ow.map)
+      for _, entry in ipairs(ow.neighbors or {}) do
+        if entry and entry.map then rebuildMap(entry.map) end
+      end
+    end
+
+    -- Also update the engine's cached world.tod value immediately. The next
+    -- normal palette lookup will see this through the hook, while encounters
+    -- already read currentPeriod() directly.
+    if ow then ow.tod = period end
+  end)
+
+  -- Initialize the live period from the system clock as soon as the game is
+  -- live. This also makes a fresh boot render with the correct period rather
+  -- than waiting for the first movement.
+  mod.events:on("game.ready", function()
+    lastPeriod = currentPeriod(Palettes)
   end)
 
   mod.exports.timeOfDay = function()
