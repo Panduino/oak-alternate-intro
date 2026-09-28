@@ -147,9 +147,11 @@ local function currentPeriod(Palettes)
   -- the Gen 2 save-time anchor here: this mod intentionally follows the
   -- computer clock.
   local hour = tonumber(os.date("%H")) or 12
-  local ok, tod = pcall(Palettes.clockDaytime, hour)
-  if ok and PERIODS[tod] then return tod end
-  return "DAY"
+  -- HGSS uses 04:00-09:59 morning, 10:00-19:59 day,
+  -- and 20:00-03:59 night.
+  if hour >= 4 and hour < 10 then return "MORN" end
+  if hour >= 10 and hour < 20 then return "DAY" end
+  return "NITE"
 end
 
 local function nationalDex(mod)
@@ -201,62 +203,109 @@ function M.install(mod)
     return next(tod, ctx)
   end)
 
-  -- G/S/C-style field tint. The engine applies the selected named palette
-  -- to the overworld; dialogue/UI remain on their normal palette.
+  -- The engine's ADVANCED color mode does not use map.palette for the
+  -- overworld. It bakes the pokered-gbc 8-group world palette through
+  -- PaletteFX.worldGroupColors instead. Wrap that actual renderer seam so
+  -- time-of-day changes are visible in ADVANCED as well as the simpler modes.
+  local PaletteFX = require("src.render.PaletteFX")
+  local originalWorldGroupColors = PaletteFX.worldGroupColors
+
+  local function copyColor(c)
+    return { c[1], c[2], c[3] }
+  end
+
+  local function tintColor(c, tod)
+    if not c then return nil end
+    local r, g, b = c[1], c[2], c[3]
+    if tod == "NITE" then
+      -- Blue/violet night grade, preserving the Advanced palette's local
+      -- hue relationships instead of replacing its per-tile colors.
+      return {
+        math.floor(r * 0.48 + b * 0.10),
+        math.floor(g * 0.50 + b * 0.08),
+        math.floor(b * 0.82 + r * 0.04),
+      }
+    elseif tod == "MORN" then
+      -- Pale blue morning grade, deliberately brighter than night.
+      return {
+        math.floor(r * 0.86 + b * 0.10 + 12),
+        math.floor(g * 0.88 + b * 0.08 + 12),
+        math.floor(b * 0.92 + r * 0.05 + 14),
+      }
+    end
+    return copyColor(c)
+  end
+
+  local function tintGroups(groups, tod)
+    if not groups then return nil end
+    local out = {}
+    for i, group in ipairs(groups) do
+      local colors = {}
+      for j, c in ipairs(group) do
+        colors[j] = tintColor(c, tod)
+      end
+      out[i] = colors
+    end
+    return out
+  end
+
+  PaletteFX.worldGroupColors = function(data, tileset, mapId, playerCellY, lit)
+    local groups = originalWorldGroupColors(data, tileset, mapId, playerCellY, lit)
+    if not groups then return groups end
+    return tintGroups(groups, currentPeriod(Palettes))
+  end
+
+  -- Keep the normal SGB/map-palette path working too. Advanced uses the
+  -- worldGroupColors wrapper above; the other modes reach this hook.
   local OUTDOOR = {
     PALLET = true, VIRIDIAN = true, PEWTER = true, CERULEAN = true,
     LAVENDER = true, VERMILION = true, CELADON = true, FUCHSIA = true,
     CINNABAR = true, INDIGO = true, SAFFRON = true, ROUTE = true,
   }
 
-  -- Register raw four-color palettes. This is the same registry shape used
-  -- by the engine's palette tests and guarantees PaletteFX can resolve the
-  -- returned names as actual world palettes.
-  mod.content.palettes:register("HGSS_MORNING", {
-    { 248, 248, 240 },
-    { 184, 200, 184 },
-    { 104, 128, 112 },
-    { 40, 64, 56 },
-  })
-
-  mod.content.palettes:register("HGSS_NIGHT", {
-    { 176, 184, 208 },
-    { 104, 112, 152 },
-    { 56, 64, 104 },
-    { 16, 24, 48 },
-  })
-
   mod.hooks:wrap("map.palette", function(next, name, map, ctx)
     name = next(name, map, ctx)
     if not OUTDOOR[name] then return name end
-
-    local tod = ctx and ctx.tod
-    if tod == "NITE" then return "HGSS_NIGHT" end
-    if tod == "MORN" then return "HGSS_MORNING" end
+    local tod = currentPeriod(Palettes)
+    if tod == "NITE" then return name end
     return name
   end)
 
-  -- Rewrite only the species after the vanilla encounter roll succeeds. This
-  -- preserves the ROM's encounter rate/step RNG while replacing its slot with
-  -- the HGSS time-of-day table.
-  mod.hooks:wrap("encounter.species", function(next, enc, ctx)
-    enc = next(enc, ctx)
+  -- Rewrite the result of the real encounter roll. This is the engine's
+  -- guaranteed Gen 1 path: encounter.roll decides whether a battle happens,
+  -- then we replace only its species/level. This keeps the ROM encounter rate
+  -- while making the actual wild slot come from the time table.
+  mod.hooks:wrap("encounter.roll", function(next, encDef, ctx)
+    local enc = next(encDef, ctx)
     if not enc or not ctx then return enc end
 
     local map = TEST_TABLES[ctx.mapId]
     if not map then return enc end
 
+    local terrain = tostring(ctx.terrain or ""):lower()
     local period = currentPeriod(Palettes)
     local rows
-    if ctx.terrain == "grass" and map.grass then
+
+    if (terrain == "grass" or terrain == "land" or terrain == "cave")
+        and map.grass then
       rows = map.grass[period]
-    elseif ctx.terrain == "water" and map.water then
+    elseif (terrain == "water" or terrain == "surf")
+        and map.water then
       rows = map.water
     end
 
-    local picked = weightedPick(filterRows(dex, rows), ctx.rng)
-    if picked then return picked end
-    return enc
+    if type(rows) ~= "table" or #rows == 0 then return enc end
+
+    -- Do not gate the test table through National Dex. The encounter hook
+    -- needs to prove the live engine path first; National Dex is the source
+    -- of the eventual full roster, not a reason to silently erase test rows.
+    local picked = weightedPick(rows, ctx.rng)
+    if not picked then return enc end
+
+    return {
+      species = picked.species,
+      level = picked.level,
+    }
   end)
 
   -- Fishing is separate from encounter.roll in Gen 1. Replace only the
