@@ -328,6 +328,16 @@ function M.install(mod)
 
   mod.events:on("world.tod_changed", function(ev)
     mod.log:info("HGSS time of day -> %s", tostring(ev.tod))
+
+    -- ADVANCED bakes the 8 world palette groups into the tileset atlas.
+    -- Rebuild the current map when the real clock crosses a boundary so an
+    -- already-open map changes immediately rather than waiting for a warp.
+    local game = mod.game
+    local ow = game and game.overworld
+    if ow and ow.map and ow.map.renderer
+        and type(ow.map.renderer.rebuild) == "function" then
+      ow.map.renderer:rebuild()
+    end
   end)
 
   mod.exports.timeOfDay = function()
