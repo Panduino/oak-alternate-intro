@@ -645,7 +645,7 @@ return function(mod)
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
-      setVar("VAR_MAP_SCENE_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
     end
   end)
 
@@ -758,7 +758,7 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
-      setVar("VAR_MAP_SCENE_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
     end
   end)
 
