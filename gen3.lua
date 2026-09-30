@@ -5,7 +5,7 @@ return function(mod)
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
   local Audio = require("src.core.game3.audio")
-  local Song = require("src.core.game3.song_ids")
+  local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
   local Space = require("src.core.game3.scripting.space")
   local Trainers = require("src.core.game3.scripting.trainers")
@@ -121,7 +121,7 @@ return function(mod)
     mod.save:set("firered_starter", row.species)
     self:_answered("starter", row.species, "starter")
 
-    Audio.playSe(Song.SE_SELECT)
+    Audio.playSe(SE.SE_SELECT)
     pcall(Audio.playCry, row.species, 0)
 
     self.win.menu = nil
