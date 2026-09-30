@@ -90,6 +90,10 @@ return function(mod)
   function Scene.Task_AlternateOakStarterInput(self, t)
     if self:printerActive() then return end
     local r = self:menuInput(false)
+    local cursor = self.win.menu and self.win.menu.cursor or 0
+    if self.win.menu then
+      self._alternateStarterSpecies = STARTERS[cursor + 1].species
+    end
     if type(r) ~= "number" or r < 0 or r > 2 then return end
 
     local row = STARTERS[r + 1]
