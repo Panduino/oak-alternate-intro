@@ -665,8 +665,8 @@ return function(mod)
       Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
     end
 
-    local playerName = liveGame.save.player.name or "RED"
-    local rivalName = liveGame.save.rivalName or "BLUE"
+    local playerName = liveGame.save.name or liveGame.save.playerName or "RED"
+    local rivalName = liveGame.save.rivalName or liveGame.save.rival or "BLUE"
     local foe = Trainers.foeFromId(trainerId)
     if not foe then
       removeRival()
@@ -793,7 +793,7 @@ return function(mod)
       end
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
       Audio.waitFanfare(function()
-        Message.show((session.player and session.player.name or "RED") ..
+        Message.show((session.name or session.playerName or "RED") ..
           " got RUNNING SHOES!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
           done = finish,
