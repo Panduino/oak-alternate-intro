@@ -508,66 +508,28 @@ return function(mod)
   end
 
   local function spawnRival(mapId)
+    if activeRival then
+      removeRival()
+    end
+
     local Objects = require("src.core.game3.objects")
-    local FieldView = package.loaded["src.core.game3.field_view"]
-
-    -- Use the engine's normal EventObject path.  The previous implementation
-    -- built a detached object pool; WorldAPI:npc() only resolves objects from
-    -- the live Objects registry, so the rival was never actually drawable.
-    local def = {
-      localId = RIVAL_OBJECT_ID,
-      mapId = mapId,
-      x = 9,
-      y = 19,
-      elevation = 3,
-      movementType = 7,
-      facing = "up",
-      graphicsId = 72,
-      sprite = "SPRITE_BLUE",
-      visible = true,
-      hidden = false,
-      passable = false,
-    }
-
-    Objects._defs = Objects._defs or {}
-
-    -- Replace any previous runtime template for this reserved local id.
-    -- Do not leave duplicate localId 8 templates in the live map definition.
-    for i = #Objects._defs, 1, -1 do
-      local oldDef = Objects._defs[i]
-      if tonumber(oldDef and (oldDef.localId or oldDef.index)) == RIVAL_OBJECT_ID then
-        table.remove(Objects._defs, i)
-      end
-    end
-
-    local existing = Objects._byId and Objects._byId[RIVAL_OBJECT_ID]
-    if existing then
-      existing.hidden = true
-      existing.visible = false
-      Objects._byId[RIVAL_OBJECT_ID] = nil
-      for i = #Objects._order, 1, -1 do
-        if Objects._order[i] == RIVAL_OBJECT_ID then
-          table.remove(Objects._order, i)
-        end
-      end
-    end
-
-    Objects._defs[#Objects._defs + 1] = def
-    if not Objects.addObject(RIVAL_OBJECT_ID) then
-      Objects._defs[#Objects._defs] = nil
-      return nil
-    end
-
-    if FieldView then FieldView._nativeDirty = true end
+    if not Objects.addObject(RIVAL_OBJECT_ID) then return nil end
 
     local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
       Objects.removeObject(RIVAL_OBJECT_ID)
-      Objects._defs[#Objects._defs] = nil
       return nil
     end
 
-    handle:placeAt(9, 19, "up")
+    -- This is the exact live EventObject path used by the last known
+    -- working Rival encounter. Only change its appearance after obtaining
+    -- the real map object.
+    handle:placeAt(15, 8, "up")
+    if not handle:setAppearance("SPRITE_BLUE") then
+      Objects.removeObject(RIVAL_OBJECT_ID)
+      return nil
+    end
+
     activeRival = RIVAL_OBJECT_ID
     return handle
   end
@@ -731,22 +693,19 @@ return function(mod)
 
     -- Start from the south road, not from the Rival's house. The pathfinder
     -- keeps every step on an actually walkable cell.
-    local approachY = math.min(y + 1, 19)
-    pathBetween(handle, x, approachY, function(ok)
-      if not ok then
-        removeRival()
-        encounterRunning = false
-        require("src.core.game3.field").unlock("alternate_oak_rival")
-        return
-      end
-
-      handle:face("up")
-      rivalDialog(
-        playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
-        "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
-        "Come on, I'll take you on!",
-        beginBattle
-      )
+    -- Preserve the movement sequence from the last known working
+    -- implementation. It is deliberately kept separate from spawning so
+    -- the appearance change cannot affect the encounter flow.
+    move(handle, "up", 6, function()
+      move(handle, "left", 15 - x, function()
+        handle:face("up")
+        rivalDialog(
+          playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
+          "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
+          "Come on, I'll take you on!",
+          beginBattle
+        )
+      end)
     end)
 
     return true
@@ -899,52 +858,25 @@ return function(mod)
     end
   end)
 
-  -- Intercept the movement BEFORE the player enters the Rival trigger cell.
-  -- This makes the encounter a real stop: running cannot carry the player
-  -- through the trigger before the field lock is installed.
-  mod.hooks:wrap("movement.collision", function(next, allowed, ctx)
-    if not allowed or encounterRunning
-        or mod.save:get("firered_pallet_rival_done") then
-      return next(allowed, ctx)
-    end
+  -- The stepped event was the last known working trigger.  Once it fires,
+  -- startRivalBattle locks the field, so the player cannot keep sprinting
+  -- through the encounter while Rival is walking in.
+  mod.events:on("world.stepped", function(ev)
+    if encounterRunning or mod.save:get("firered_pallet_rival_done") then return end
+    if not liveGame or not ev.mapId then return end
 
-    local mover = ctx and ctx.mover
-    local isPlayer = mover and (
-      mover.localId == 0xFF
-      or mover.localId == 255
-      or mover == package.loaded["src.core.game3.player"]
-    )
-    if not isPlayer or not liveGame or not ctx.toX or not ctx.toY then
-      return next(allowed, ctx)
-    end
-
-    local mapId = tostring(ctx.map and ctx.map.id
-      or liveGame.save.map
-      or liveGame.save.mapId
-      or "")
+    local mapId = tostring(ev.mapId)
     if not mapId:find("PALLET_TOWN", 1, true)
         or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
-      return next(allowed, ctx)
+      return
     end
     if not mod.save:get("firered_starter")
         or not mod.save:get("firered_mom_gift_done") then
-      return next(allowed, ctx)
+      return
     end
 
-    local tx, ty = tonumber(ctx.toX), tonumber(ctx.toY)
-    if (tx ~= 12 and tx ~= 13) or ty > 2 then
-      return next(allowed, ctx)
-    end
-
-    local fromX, fromY = tonumber(ctx.fromX), tonumber(ctx.fromY)
-    if not fromX or not fromY then
-      return next(allowed, ctx)
-    end
-
-    if startRivalBattle(mapId, fromX, fromY) then
-      return false
-    end
-
-    return next(allowed, ctx)
+    local x, y = tonumber(ev.x), tonumber(ev.y)
+    if (x ~= 12 and x ~= 13) or y > 2 then return end
+    startRivalBattle(mapId, x, y)
   end)
 end
