@@ -40,6 +40,7 @@ return function(mod)
   local liveGame
   local activeRival
   local encounterRunning = false
+  local RIVAL_OBJECT_ID = 8
 
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -297,36 +298,27 @@ return function(mod)
 
   local function spawnRival(mapId, x)
     if activeRival then
-      pcall(mod.world.removeNpc, mod.world, activeRival)
-      activeRival = nil
+      removeRival()
     end
 
-    local id = mod.world:spawnNpc(mapId, {
-      index = 126,
-      name = "ALTERNATE_INTRO_RIVAL",
-      sprite = "SPRITE_BLUE",
-      x = x,
-      y = 0,
-      elevation = 3,
-      movement = "STAY",
-      range = "DOWN",
-    })
-    if not id then return nil end
+    local Objects = require("src.core.game3.objects")
+    if not Objects.addObject(RIVAL_OBJECT_ID) then return nil end
 
-    local handle = mod.world:npc(mapId, id)
+    local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
-      mod.world:removeNpc(id)
+      Objects.removeObject(RIVAL_OBJECT_ID)
       return nil
     end
 
     handle:placeAt(15, 8, "up")
-    activeRival = id
+    activeRival = RIVAL_OBJECT_ID
     return handle
   end
 
   local function removeRival()
     if activeRival then
-      pcall(mod.world.removeNpc, mod.world, activeRival)
+      local Objects = require("src.core.game3.objects")
+      Objects.removeObject(activeRival)
       activeRival = nil
     end
   end
@@ -343,7 +335,7 @@ return function(mod)
 
   local function departRival(handle, playerX)
     local right = 15 - playerX
-    local down = 7 - 1
+    local down = 7 - 2
 
     move(handle, "right", right, function()
       move(handle, "down", down, removeRival)
@@ -416,7 +408,7 @@ return function(mod)
       end
     end
 
-    move(handle, "up", 7, function()
+    move(handle, "up", 6, function()
       move(handle, "left", 15 - x, function()
         handle:face("up")
       rivalDialog(
