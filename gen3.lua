@@ -426,7 +426,7 @@ return function(mod)
       handle:face("down")
       rivalDialog(
         "Hey, " .. playerName .. "!\\n" ..
-        "Heading out already?\\n\\p" ..
+        "Heading out already?\\n\\f" ..
         "I've got a POKéMON too.\\nLet's have a battle!",
         beginBattle
       )
