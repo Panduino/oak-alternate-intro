@@ -195,6 +195,13 @@ return function(mod)
     end
 
     if self:printerActive() then return end
+    if t.data.page == 2 then
+      t.data.page = 3
+      rawPrint(self, "Which one would you like?")
+      return
+    end
+
+    if self:printerActive() then return end
     t.func = Scene.Task_AlternateOakStarterInput
   end
 
@@ -367,6 +374,15 @@ return function(mod)
   Scene.Task_OakSpeech_FadeInRivalPic = function(self, t)
     self:loadTrainerPic("rival")
     return originalFadeInRivalPic(self, t)
+  end
+
+  Scene.Task_OakSpeech_AskRivalsName = function(self, t)
+    if t.data.picFadeState == 0 then return end
+    self:loadTrainerPic("rival")
+    if self.pic then self.pic.hidden = false end
+    self:oakPrint("rival_intro")
+    self.hasPlayerBeenNamed = true
+    t.func = Scene.Task_OakSpeech_MoveRivalDisplayNameOptions
   end
 
   Scene.Task_OakSpeech_FadeOutPlayerPic = function(self, t)
@@ -700,23 +716,39 @@ return function(mod)
 
     local px = tonumber(session.x) or 8
     local py = tonumber(session.y) or 5
-    local mx = handle.x or handle.cellX or px
-    local my = handle.y or handle.cellY or (py - 1)
+    local mx, my = handle:position()
+    local steps = 0
 
-    if math.abs(mx - px) + math.abs(my - py) == 1 then
-      talk()
-      return
+    local function walkToPlayer()
+      mx, my = handle:position()
+      if mx == px and my == py - 1 then
+        handle:face("up")
+        talk()
+        return
+      end
+
+      local dir
+      if my > py - 1 then
+        dir = "up"
+      elseif my < py - 1 then
+        dir = "down"
+      elseif mx < px then
+        dir = "right"
+      elseif mx > px then
+        dir = "left"
+      end
+
+      if not dir or steps >= 16 or not handle:canStep(dir) then
+        handle:face("up")
+        talk()
+        return
+      end
+
+      steps = steps + 1
+      handle:scriptMove(dir, 1, walkToPlayer)
     end
 
-    local dx = px - mx
-    local dy = py - my
-    if math.abs(dy) >= math.abs(dx) and dy ~= 0 then
-      handle:scriptMove(dy > 0 and "down" or "up", math.abs(dy), talk)
-    elseif dx ~= 0 then
-      handle:scriptMove(dx > 0 and "right" or "left", math.abs(dx), talk)
-    else
-      talk()
-    end
+    walkToPlayer()
   end
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
