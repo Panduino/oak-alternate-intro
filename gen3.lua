@@ -183,7 +183,7 @@ return function(mod)
 
     if t.data.page == nil then
       t.data.page = 1
-      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your\\nown!")
+      rawPrint(self, "Before you leave,\\nget yourself a\\nPOKéMON!")
       return
     end
 
@@ -430,7 +430,7 @@ return function(mod)
         "I have a request for you.\f" ..
         "I want you to help me with\nmy research.\f" ..
         "I've given you an invention\nof mine, the POKéDEX!\f" ..
-        "It automatically records data\non POKéMON you've seen or\ncaught!\f" ..
+        "It records information on\nPOKéMON you've seen or\ncaught!\f" ..
         "It's a hi-tech encyclopedia!\f" ..
         "Take this with you, {PLAYER}!\f" ..
         "It will help you on your journey.\f" ..
@@ -453,7 +453,7 @@ return function(mod)
     end
   end
 
-  local function setupProgress(session)
+  local function applyProgress(session)
     session.vars = session.vars or {}
     session.flags = session.flags or {}
 
@@ -494,7 +494,7 @@ return function(mod)
       return session
     end
 
-    setupProgress(session)
+    applyProgress(session)
     return session
   end)
 
@@ -633,6 +633,20 @@ return function(mod)
 
   mod.events:on("game.ready", function(ev)
     liveGame = ev.game
+    if liveGame and liveGame.save then
+      applyProgress(liveGame.save)
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+      if Flags.IDS.FLAG_HIDE_OAK_IN_PALLET_TOWN then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_PALLET_TOWN, true)
+      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
+      setVar("VAR_MAP_SCENE_OAKS_LAB", 6)
+    end
   end)
 
   local function giveMomItems()
@@ -663,7 +677,7 @@ return function(mod)
 
     local function giveMap()
       Bag.add(session.bag, 361, 1)
-      Audio.playFanfare("MUS_LEVEL_UP")
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
       Message.show((session.player and session.player.name or "RED") ..
         " got a TOWN MAP!", {
         npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
@@ -694,8 +708,8 @@ return function(mod)
       })
     end
 
-    local px = tonumber(session.x) or 8
-    local py = tonumber(session.y) or 5
+    local px = tonumber(session.player and session.player.x) or 8
+    local py = tonumber(session.player and session.player.y) or 5
     local mx, my = handle:position()
     local steps = 0
 
@@ -744,6 +758,7 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
+      setVar("VAR_MAP_SCENE_OAKS_LAB", 6)
     end
   end)
 
@@ -755,7 +770,7 @@ return function(mod)
         or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
       return
     end
-    if ev.y ~= 1 or (ev.x ~= 12 and ev.x ~= 13) then return end
+    if ev.y ~= 2 or (ev.x ~= 12 and ev.x ~= 13) then return end
     if not mod.save:get("firered_starter") then return end
     if not mod.save:get("firered_mom_gift_done") then return end
 
