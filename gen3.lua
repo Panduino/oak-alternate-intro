@@ -868,7 +868,7 @@ return function(mod)
       -- Re-add it after correcting the hide flag so a stale object state
       -- from the intro scene cannot leave the lab empty.
       local Objects = require("src.core.game3.objects")
-      Objects.addObject(8)
+  
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
