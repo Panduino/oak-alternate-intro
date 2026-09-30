@@ -42,7 +42,7 @@ return function(mod)
   local liveGame
   local activeRival
   local encounterRunning = false
-  local RIVAL_OBJECT_ID = 3
+  local RIVAL_OBJECT_ID = 1
 
   -- Reuse the engine's working FireRed Oak printer instead of maintaining
   -- a second text implementation.  We temporarily replace RomText.ascii so
@@ -524,7 +524,7 @@ return function(mod)
     -- This is the exact live EventObject path used by the last known
     -- working Rival encounter. Only change its appearance after obtaining
     -- the real map object.
-    handle:placeAt(14, 14, "left")
+    handle:placeAt(10, 8, "up")
     if not handle:setAppearance("SPRITE_BLUE") then
       Objects.removeObject(RIVAL_OBJECT_ID)
       return nil
@@ -691,16 +691,13 @@ return function(mod)
       end
     end
 
-    -- Match FireRed's actual Pallet Town Oak movement script.  Do not
-    -- pathfind this approach: vanilla uses a fixed applymovement sequence,
-    -- and Game3's scriptMove is the same blocking movement primitive used by
-    -- those scripts.
+    -- Use FireRed's exact Pallet Town Oak approach.  The native Oak object
+    -- starts at (10,8); the left/right trigger movement is the same fixed
+    -- applymovement sequence used by the ROM.
     local approach
     if x == 12 then
-      -- PalletTown_Movement_OakEnterLeft
       approach = { "up", "up", "right", "up", "up", "right", "up", "up" }
     else
-      -- PalletTown_Movement_OakEnterRight
       approach = { "right", "up", "up", "right", "up", "up", "right", "up", "up" }
     end
 
@@ -716,14 +713,9 @@ return function(mod)
         return
       end
 
-      local ok = handle:scriptMove(approach[i], 1, function()
+      handle:scriptMove(approach[i], 1, function()
         walkApproach(i + 1)
       end)
-      if not ok then
-        removeRival()
-        encounterRunning = false
-        require("src.core.game3.field").unlock("alternate_oak_rival")
-      end
     end
 
     walkApproach(1)
@@ -872,6 +864,11 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
+      -- FireRed's post-intro Oak is local object 8 (OAKSLAB_OAK1).
+      -- Re-add it after correcting the hide flag so a stale object state
+      -- from the intro scene cannot leave the lab empty.
+      local Objects = require("src.core.game3.objects")
+      Objects.addObject(8)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
@@ -888,7 +885,11 @@ return function(mod)
     if not allowed or encounterRunning or mod.save:get("firered_pallet_rival_done") then
       return next(allowed, ctx)
     end
-    if not liveGame or not ctx or not ctx.map or tostring(ctx.map.id) ~= "PALLET_TOWN" then
+    if not liveGame or not ctx or not ctx.map then
+      return next(allowed, ctx)
+    end
+    local collisionMapId = tostring(ctx.map.id or "")
+    if collisionMapId:gsub("^FR_", "") ~= "PALLET_TOWN" then
       return next(allowed, ctx)
     end
     if not mod.save:get("firered_starter") or not mod.save:get("firered_mom_gift_done") then
