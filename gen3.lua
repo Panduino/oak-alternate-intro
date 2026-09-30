@@ -524,7 +524,7 @@ return function(mod)
     -- This is the exact live EventObject path used by the last known
     -- working Rival encounter. Only change its appearance after obtaining
     -- the real map object.
-    handle:placeAt(15, 8, "up")
+    handle:placeAt(14, 14, "left")
     if not handle:setAppearance("SPRITE_BLUE") then
       Objects.removeObject(RIVAL_OBJECT_ID)
       return nil
