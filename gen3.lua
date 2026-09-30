@@ -183,7 +183,7 @@ return function(mod)
 
     if t.data.page == nil then
       t.data.page = 1
-      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your own!")
+      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your\\nown!")
       return
     end
 
@@ -361,7 +361,6 @@ return function(mod)
     local row = starterRow(self)
     if row then
       mod.save:set("firered_starter_nickname", self._alternateStarterNickname or row.name)
-      giveStarterToLiveGame()
     end
 
     self:clearDialog()
@@ -458,18 +457,16 @@ return function(mod)
     session.vars = session.vars or {}
     session.flags = session.flags or {}
 
-        local species = tonumber(mod.save:get("firered_starter"))
+    local species = tonumber(mod.save:get("firered_starter"))
     local row = STARTER_BY_SPECIES[species]
     if not row then return end
 
     session.vars[0x4031] = row.index
-    session.vars[0x4050] = 1
     session.vars[0x4055] = 6
 
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
-    session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
@@ -483,19 +480,6 @@ return function(mod)
     session.dex.caught[row.species] = true
   end
 
-  local function giveStarterToLiveGame()
-    if not liveGame or mod.save:get("firered_starter_given") then return end
-    local species = tonumber(mod.save:get("firered_starter"))
-    local row = STARTER_BY_SPECIES[species]
-    if not row then return end
-
-    local nickname = mod.save:get("firered_starter_nickname") or row.name
-    if Party.giveMon(liveGame.save, row.species, 5, nickname) then
-      setupProgress(liveGame.save)
-      mod.save:set("firered_starter_given", true)
-    end
-  end
-
   mod.hooks:wrap("save.new_game", function(next, session)
     session = next(session) or session
 
@@ -503,18 +487,12 @@ return function(mod)
     local row = STARTER_BY_SPECIES[species]
     if not row then return session end
 
-    if mod.save:get("firered_starter_given") then
-      setupProgress(session)
-      return session
-    end
-
     local nickname = mod.save:get("firered_starter_nickname")
     if not Party.giveMon(session, row.species, 5, nickname or row.name) then
       return session
     end
 
     setupProgress(session)
-    mod.save:set("firered_starter_given", true)
     return session
   end)
 
