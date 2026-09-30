@@ -471,6 +471,7 @@ return function(mod)
     session.vars[0x4031] = row.index
     session.vars[0x4050] = 1
     session.vars[0x4055] = 6
+    session.vars[0x4057] = 1
 
     session.flags[40] = true
     session.flags[41] = true
@@ -566,6 +567,8 @@ return function(mod)
     local handle = spawnRival(mapId, x)
     if not handle then return false end
 
+    local Field = require("src.core.game3.field")
+    Field.lock("alternate_oak_rival")
     encounterRunning = true
     mod.save:set("firered_pallet_rival_done", true)
     setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
@@ -583,6 +586,7 @@ return function(mod)
     if not foe then
       removeRival()
       encounterRunning = false
+      require("src.core.game3.field").unlock("alternate_oak_rival")
       return false
     end
 
@@ -613,6 +617,7 @@ return function(mod)
             "I'll see you around, " .. playerName .. "!",
             function()
               departRival(handle, x)
+              require("src.core.game3.field").unlock("alternate_oak_rival")
             end
           )
         end,
@@ -620,6 +625,7 @@ return function(mod)
       if not ok then
         removeRival()
         encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
       end
     end
 
