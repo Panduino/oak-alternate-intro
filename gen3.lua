@@ -9,6 +9,8 @@ return function(mod)
   local Space = require("src.core.game3.scripting.space")
   local Trainers = require("src.core.game3.scripting.trainers")
   local BattleBridge = require("src.core.game3.battle_bridge")
+  local SE = require("src.core.game3.se_ids")
+  local RomText = require("src.core.game3.rom_text")
 
   if Scene._alternateOakIntroGen3Installed then return end
   Scene._alternateOakIntroGen3Installed = true
@@ -51,6 +53,29 @@ return function(mod)
     local ok, entry = pcall(Pokemon.frontPic, row.species, nil, false, 0)
     if ok and entry then return entry end
     return nil
+  end
+
+  local originalOakPrint = Scene.oakPrint
+  local makePrinter
+  for i = 1, 20 do
+    local name, value = debug.getupvalue(originalOakPrint, i)
+    if not name then break end
+    if name == "newPrinter" then
+      makePrinter = value
+      break
+    end
+  end
+
+  local function oakPrintText(self, text, speed)
+    if not makePrinter then
+      return originalOakPrint(self, "lets_go", speed)
+    end
+    text = RomText.ascii(text, {
+      playerName = self.playerName,
+      rivalName = self.rivalName,
+    }):gsub("\\p", "\f"):gsub("\\l", "\n")
+    self.win.dialog = true
+    self.printer = makePrinter(text, speed == nil and self.textSpeed or speed, true)
   end
 
   local originalDrawBg0Text = Scene.drawBg0Text
@@ -99,7 +124,7 @@ return function(mod)
   function Scene.Task_AlternateOakStarterIntro(self, t)
     if self:fadeActive() then return end
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
-    self:oakPrint(
+    oakPrintText(self,
       "Before you leave, you should have\\na POKéMON of your own!\\f" ..
       "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?"
     )
@@ -121,13 +146,13 @@ return function(mod)
     mod.save:set("firered_starter", row.species)
     self:_answered("starter", row.species, "starter")
 
-    Audio.playSe(Song.SE_SELECT)
+    Audio.playSe(SE.SE_SELECT)
     pcall(Audio.playCry, row.species, 0)
 
     self.win.menu = nil
     self._alternateStarterMenu = false
     self:clearDialog()
-    self:oakPrint(
+    oakPrintText(self,
       ("A %s will be a great\\npartner for you!\\f" ..
       "Would you like to\\ngive it a nickname?"):format(row.name)
     )
