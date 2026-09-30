@@ -4,6 +4,7 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local Flags = require("src.core.game3.scripting.flags")
   local Space = require("src.core.game3.scripting.space")
@@ -75,14 +76,131 @@ return function(mod)
     if Message.isOpen() then Message.close() end
   end
 
+  -- The Oak scene already has a native FireRed printer in new_game_scene.lua.
+  -- Keep the same printer contract here so the alternate dialogue is drawn
+  -- by the Oak scene itself, with the normal page arrow and A-button input.
+  local function utf8Chars(s)
+    local out = {}
+    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
+      out[#out + 1] = ch
+    end
+    return out
+  end
+
+  local function newOakPrinter(text, speed)
+    local p = {
+      pages = {}, page = 1, revealed = 0, tokens = {}, pos = 1,
+      active = true, state = "char", delay = 0, spedUp = false,
+      canSpeedUp = true, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
+    }
+
+    local pageText = ""
+    for _, ch in ipairs(utf8Chars(text)) do
+      if ch == "\\f" then
+        p.pages[#p.pages + 1] = pageText
+        pageText = ""
+        p.tokens[#p.tokens + 1] = "P"
+      elseif ch == "\\n" then
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "N"
+      else
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "C"
+      end
+    end
+    p.pages[#p.pages + 1] = pageText
+    p.tokens[#p.tokens + 1] = "E"
+    p.textSpeed = speed == 0 and 0 or speed - 1
+
+    if speed == 0 then
+      while p.active do
+        local tok = p.tokens[p.pos]
+        p.pos = p.pos + 1
+        if tok == "C" or tok == "N" then
+          p.revealed = p.revealed + 1
+        elseif tok == "E" or tok == nil then
+          p.active = false
+        end
+      end
+    end
+
+    function p:render(newAB, heldAB)
+      if self.state == "char" then
+        if heldAB and self.spedUp then self.delay = 0 end
+        if self.delay > 0 and self.textSpeed > 0 then
+          self.delay = self.delay - 1
+          if self.canSpeedUp and newAB then
+            self.spedUp = true
+            self.delay = 0
+          end
+          return "update"
+        end
+
+        self.delay = self.textSpeed
+        local tok = self.tokens[self.pos]
+        self.pos = self.pos + 1
+
+        if tok == "N" then
+          self.revealed = self.revealed + 1
+          return "repeat"
+        elseif tok == "P" then
+          self.state = "clear"
+          self.arrowIdx, self.arrowDelay = 0, 0
+          return "update"
+        elseif tok == "E" or tok == nil then
+          self.active = false
+          return "finish"
+        end
+
+        self.revealed = self.revealed + 1
+        return "print"
+      end
+
+      if self.arrowDelay ~= 0 then
+        self.arrowDelay = self.arrowDelay - 1
+      else
+        self.arrowFrame = ({ 0, 1, 2, 1 })[self.arrowIdx + 1]
+        self.arrowDelay = 8
+        self.arrowIdx = (self.arrowIdx + 1) % 4
+      end
+
+      if newAB then
+        Audio.playSe(SE.SE_SELECT)
+        self.page = self.page + 1
+        self.revealed = 0
+        self.arrowFrame = nil
+        self.state = "char"
+      end
+      return "update"
+    end
+
+    function p:run(newAB, heldAB)
+      if not self.active then return end
+      for _ = 1, 64 do
+        if self:render(newAB, heldAB) ~= "repeat" then return end
+      end
+    end
+
+    function p:draw(x, y, opts)
+      local text = self.pages[self.page] or ""
+      local _, endX, endY = FrlgFont.draw(text, x, y, {
+        maxWidth = opts.maxWidth or 240,
+        limitChars = self.revealed,
+        colors = opts.colors or FrlgFont.COLOR.NORMAL,
+        linePitch = opts.linePitch,
+      })
+      if self.state == "clear" and self.arrowFrame and endX then
+        Chrome.promptArrow(endX, endY, self.arrowFrame)
+      end
+    end
+
+    return p
+  end
+
   local function showText(scene, text, opts)
     opts = opts or {}
-    opts.speed = opts.speed == nil and scene.textSpeed or opts.speed
-    opts.ctx = opts.ctx or {
-      playerName = scene.playerName,
-      rivalName = scene.rivalName,
-    }
-    Message.show(text, opts)
+    scene.win.dialog = true
+    scene.printer = newOakPrinter(text, opts.speed == nil and scene.textSpeed or opts.speed)
   end
 
   local function showStarterMenu(scene)
@@ -137,22 +255,6 @@ return function(mod)
   -- the native LetsGo text is never printed.
   --------------------------------------------------------------------------
 
-  local originalSceneFrame = Scene.frame
-  Scene.frame = function(self)
-    local alternateMessageWasOpen = Message.isOpen()
-    originalSceneFrame(self)
-
-    -- The new-game scene normally advances its native printer itself.
-    -- Message.lua is a field-message system, so it is not ticked by the
-    -- new-game scene. Pump it here while our alternate intro is active.
-    if self._alternateOakIntroActive then
-      Message.tick()
-      if alternateMessageWasOpen and (self.input.a or self.input.b) then
-        Message.advance()
-      end
-    end
-  end
-
   local originalOakSpeechReshowPlayersPic = Scene.Task_OakSpeech_ReshowPlayersPic
   local originalOakSpeechFadeOutBGM = Scene.Task_OakSpeech_FadeOutBGM
 
@@ -179,7 +281,6 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterIntro(self, t)
-    self._alternateOakIntroActive = true
     if self:fadeActive() then return end
 
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
@@ -193,7 +294,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterInput(self, t)
-    if Message.isOpen() then return end
+    if self:printerActive() then return end
 
     if not self._alternateStarterMenu then
       showStarterMenu(self)
@@ -223,7 +324,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterNaming(self, t)
-    if Message.isOpen() then return end
+    if self:printerActive() then return end
 
     local row = starterRow(self)
     if not row then
@@ -316,7 +417,7 @@ return function(mod)
 
   function Scene.Task_AlternateOakPokedex(self, t)
     if self._alternatePokedexShown then
-      if Message.isOpen() then return end
+      if self:printerActive() then return end
       t.func = Scene.Task_AlternateOakPokedexWait
       return
     end
@@ -347,9 +448,8 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakPokedexWait(self, t)
-    if Message.isOpen() then return end
+    if self:printerActive() then return end
     clearMessage()
-    self._alternateOakIntroActive = false
     t.data.timer = 0
     t.func = originalOakSpeechFadeOutBGM
   end
