@@ -10,7 +10,7 @@ return function(mod)
   local Trainers = require("src.core.game3.scripting.trainers")
   local BattleBridge = require("src.core.game3.battle_bridge")
   local SE = require("src.core.game3.se_ids")
-  local RomText = require("src.core.game3.rom_text")
+  local Message = require("src.ui.game3.message")
 
   if Scene._alternateOakIntroGen3Installed then return end
   Scene._alternateOakIntroGen3Installed = true
@@ -56,13 +56,23 @@ return function(mod)
   end
 
   local function oakPrintText(self, text, speed)
-    text = RomText.ascii(text, {
-      playerName = self.playerName,
-      rivalName = self.rivalName,
-    }):gsub("\\p", ""):gsub("\\l", "
-")
-    self.win.dialog = true
-    self.printer = RomText.newPrinter(text, speed == nil and self.textSpeed or speed, true)
+    Message.show(text, {
+      speed = speed == nil and self.textSpeed or speed,
+      ctx = {
+        playerName = self.playerName,
+        rivalName = self.rivalName,
+      },
+    })
+  end
+
+  local function starterMessageActive()
+    return Message.isOpen()
+  end
+
+  local function clearStarterMessage()
+    if Message.isOpen() then
+      Message.dismiss()
+    end
   end
 
   local originalDrawBg0Text = Scene.drawBg0Text
@@ -120,7 +130,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterInput(self, t)
-    if self:printerActive() then return end
+    if starterMessageActive() then return end
     local r = self:menuInput(false)
     local cursor = self.win.menu and self.win.menu.cursor or 0
     if self.win.menu then
@@ -147,7 +157,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterNaming(self, t)
-    if self:printerActive() then return end
+    if starterMessageActive() then return end
 
     local row = starterRow(self)
     if not row then
@@ -155,7 +165,7 @@ return function(mod)
       return
     end
 
-    self:clearDialog()
+    clearStarterMessage()
     self._alternateStarterNamingTask = t
     self._alternateStarterNaming = true
 
@@ -228,7 +238,7 @@ return function(mod)
       mod.save:set("firered_starter_nickname", self._alternateStarterNickname or row.name)
     end
 
-    self:clearDialog()
+    clearStarterMessage()
     self._alternateStarterInserted = true
     t.data.timer = 0
     t.func = originalOakSpeechLetsGo
