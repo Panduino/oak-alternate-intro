@@ -89,12 +89,15 @@ return function(mod)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
   end
 
-  local function starterImage(scene)
+  local function loadStarterImage(scene)
     local row = starterRow(scene)
-    if not row then return nil end
+    if not row then return end
     local ok, entry = pcall(Pokemon.frontPic, row.species, nil, false, 0)
-    if ok and entry then return entry end
-    return nil
+    if ok and entry and entry.image then
+      scene._alternateStarterImage = entry
+    else
+      scene._alternateStarterImage = nil
+    end
   end
 
   local originalDrawBg0Text = Scene.drawBg0Text
@@ -102,9 +105,8 @@ return function(mod)
     originalDrawBg0Text(self)
     if not self._alternateStarterMenu then return end
 
-    local row = starterRow(self)
-    local entry = starterImage(self)
-    if not (row and entry and entry.image) then return end
+    local entry = self._alternateStarterImage
+    if not (entry and entry.image) then return end
 
     local img = entry.image
     local iw = entry.w or img:getWidth()
@@ -123,9 +125,9 @@ return function(mod)
       width = 16,
       height = 8,
       items = {
-        { "BULBASAUR", 8, 1 },
-        { "CHARMANDER", 8, 17 },
-        { "SQUIRTLE", 8, 33 },
+        { "", 8, 1 },
+        { "", 8, 17 },
+        { "", 8, 33 },
       },
       cursorX = 0,
       cursorY = 1,
@@ -134,6 +136,7 @@ return function(mod)
       wrap = false,
     }
     self._alternateStarterMenu = true
+    loadStarterImage(self)
   end
 
   function Scene.Task_AlternateOakStarterIntro(self, t)
@@ -151,10 +154,14 @@ return function(mod)
       showStarterMenu(self)
       return
     end
+    local oldCursor = self.win.menu.cursor
     local r = self:menuInput(false)
     local cursor = self.win.menu and self.win.menu.cursor or 0
     if self.win.menu then
       self._alternateStarterSpecies = STARTERS[cursor + 1].species
+      if cursor ~= oldCursor then
+        loadStarterImage(self)
+      end
     end
     if type(r) ~= "number" or r < 0 or r > 2 then return end
 
