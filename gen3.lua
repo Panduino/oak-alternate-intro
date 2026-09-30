@@ -55,27 +55,14 @@ return function(mod)
     return nil
   end
 
-  local originalOakPrint = Scene.oakPrint
-  local makePrinter
-  for i = 1, 20 do
-    local name, value = debug.getupvalue(originalOakPrint, i)
-    if not name then break end
-    if name == "newPrinter" then
-      makePrinter = value
-      break
-    end
-  end
-
   local function oakPrintText(self, text, speed)
-    if not makePrinter then
-      return originalOakPrint(self, "lets_go", speed)
-    end
     text = RomText.ascii(text, {
       playerName = self.playerName,
       rivalName = self.rivalName,
-    }):gsub("\\p", "\f"):gsub("\\l", "\n")
+    }):gsub("\\p", ""):gsub("\\l", "
+")
     self.win.dialog = true
-    self.printer = makePrinter(text, speed == nil and self.textSpeed or speed, true)
+    self.printer = RomText.newPrinter(text, speed == nil and self.textSpeed or speed, true)
   end
 
   local originalDrawBg0Text = Scene.drawBg0Text
