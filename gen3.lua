@@ -42,6 +42,42 @@ return function(mod)
   local encounterRunning = false
   local RIVAL_OBJECT_ID = 8
 
+  local function rawPrint(scene, text)
+    local pages = {}
+    for page in (text .. "\\f"):gmatch("(.-)\\\\f") do
+      pages[#pages + 1] = page
+    end
+    local printer = {
+      pages = pages,
+      page = 1,
+      active = true,
+      shown = false,
+    }
+    function printer:run(newAB)
+      if not self.active then return end
+      if not self.shown then
+        self.shown = true
+        return
+      end
+      if newAB then
+        if self.page < #self.pages then
+          self.page = self.page + 1
+          self.shown = false
+        else
+          self.active = false
+        end
+      end
+    end
+    function printer:draw(x, y, opts)
+      FrlgFont.draw(self.pages[self.page] or "", x, y, {
+        maxWidth = opts.maxWidth,
+        colors = opts.colors,
+      })
+    end
+    scene.win.dialog = true
+    scene.printer = printer
+  end
+
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
   end
@@ -100,10 +136,9 @@ return function(mod)
   function Scene.Task_AlternateOakStarterIntro(self, t)
     if self:fadeActive() then return end
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
-    self:oakPrint(
+    rawPrint(self,
       "Before you leave, you should have\\na POKéMON of your own!\\f" ..
-      "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?"
-    )
+      "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?")
     showStarterMenu(self)
     t.func = Scene.Task_AlternateOakStarterInput
   end
@@ -128,10 +163,9 @@ return function(mod)
     self.win.menu = nil
     self._alternateStarterMenu = false
     self:clearDialog()
-    self:oakPrint(
+    rawPrint(self,
       ("A %s will be a great\\npartner for you!\\f" ..
-      "Would you like to\\ngive it a nickname?"):format(row.name)
-    )
+      "Would you like to\\ngive it a nickname?"):format(row.name))
     t.func = Scene.Task_AlternateOakStarterNaming
   end
 
