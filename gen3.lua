@@ -44,6 +44,7 @@ return function(mod)
 
   local function rawPrint(scene, text)
     text = text:gsub("\\\\f", "\f")
+    text = text:gsub("{PLAYER}", scene.playerName or "RED")
     local pages = {}
     for page in (text .. "\f"):gmatch("(.-)\f") do
       pages[#pages + 1] = page
@@ -399,6 +400,7 @@ return function(mod)
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
+    session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
 
