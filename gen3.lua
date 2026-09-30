@@ -44,6 +44,7 @@ return function(mod)
 
   local function rawPrint(scene, text)
     text = text:gsub("\\\\f", "\f")
+    text = text:gsub("\\\\n", "\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
     local pages = {}
     for page in (text .. "\f"):gmatch("(.-)\f") do
@@ -112,10 +113,6 @@ return function(mod)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(img, 48, 68, 0, scale, scale, iw / 2, ih / 2)
-    FrlgFont.draw(row.name, 8, 118, {
-      colors = FrlgFont.COLOR.WHITE,
-      maxWidth = 80,
-    })
   end
 
   local function showStarterMenu(self)
@@ -145,12 +142,15 @@ return function(mod)
     rawPrint(self,
       "Before you leave, you should have\\na POKéMON of your own!\\f" ..
       "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?")
-    showStarterMenu(self)
     t.func = Scene.Task_AlternateOakStarterInput
   end
 
   function Scene.Task_AlternateOakStarterInput(self, t)
     if self:printerActive() then return end
+    if not self.win.menu then
+      showStarterMenu(self)
+      return
+    end
     local r = self:menuInput(false)
     local cursor = self.win.menu and self.win.menu.cursor or 0
     if self.win.menu then
