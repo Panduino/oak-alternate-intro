@@ -4,6 +4,7 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
@@ -42,108 +43,142 @@ return function(mod)
   local encounterRunning = false
   local RIVAL_OBJECT_ID = 8
 
-  local function rawPrint(scene, text)
-    text = text:gsub("\\f", "\f")
-    text = text:gsub("\\n", "\n")
-    text = text:gsub("\\p", "\f")
-    text = text:gsub("\\l", "\n")
-    text = text:gsub("{PLAYER}", scene.playerName or "RED")
+  -- FireRed's actual text-printer flow, adapted from
+  -- src/ui/game3/new_game_scene.lua.  In particular, the continuation
+  -- arrow is drawn by Chrome.promptArrow() at the printer's current text
+  -- position instead of using a guessed screen coordinate.
+  local ARROW_FRAMES = { 0, 1, 2, 1 }
+  local CURSOR_DELAY = 8
 
-    local pages = {}
-    local textWidth = 200
-    for page in (text .. "\f"):gmatch("(.-)\f") do
-      pages[#pages + 1] = FrlgFont.wrap(page, textWidth)
+  local function utf8Chars(s)
+    local out = {}
+    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
+      out[#out + 1] = ch
     end
+    return out
+  end
 
-    local printer = {
-      pages = pages,
-      page = 1,
-      revealed = 0,
-      pos = 1,
-      active = true,
-      waiting = false,
-      delay = 0,
+  local function newPrinter(text, speed, canSpeedUp, textWidth)
+    local p = {
+      pages = {}, page = 1, revealed = 0, tokens = {}, pos = 1,
+      active = true, state = "char", delay = 0, spedUp = false,
+      canSpeedUp = canSpeedUp, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
     }
 
-    local function charCount(s)
-      return FrlgFont.countChars(s or "")
+    local pageText = ""
+    for _, ch in ipairs(utf8Chars(text)) do
+      if ch == "\\f" then
+        p.pages[#p.pages + 1] = FrlgFont.wrap(pageText, textWidth)
+        pageText = ""
+        p.tokens[#p.tokens + 1] = "P"
+      elseif ch == "\\n" then
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "N"
+      else
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "C"
+      end
+    end
+    p.pages[#p.pages + 1] = FrlgFont.wrap(pageText, textWidth)
+    p.tokens[#p.tokens + 1] = "E"
+
+    if speed == 0 then
+      p.textSpeed = 0
+      while p.active do
+        local tok = p.tokens[p.pos]
+        p.pos = p.pos + 1
+        if tok == "C" or tok == "N" then
+          p.revealed = p.revealed + 1
+        elseif tok == "E" or tok == nil then
+          p.active = false
+        end
+      end
+    else
+      p.textSpeed = speed - 1
     end
 
-    printer.total = charCount(printer.pages[1])
+    function p:render(newAB, heldAB)
+      if self.state == "char" then
+        if heldAB and self.spedUp then self.delay = 0 end
+        if self.delay > 0 and self.textSpeed > 0 then
+          self.delay = self.delay - 1
+          if self.canSpeedUp and newAB then
+            self.spedUp = true
+            self.delay = 0
+          end
+          return "update"
+        end
 
-    function printer:run(newAB, heldAB)
-      if not self.active then return end
-
-      if self.waiting then
+        self.delay = self.textSpeed
+        local tok = self.tokens[self.pos]
+        self.pos = self.pos + 1
+        if tok == "N" then
+          self.revealed = self.revealed + 1
+          return "repeat"
+        end
+        if tok == "P" then
+          self.state = "clear"
+          self.arrowIdx, self.arrowDelay = 0, 0
+          return "update"
+        end
+        if tok == "E" or tok == nil then
+          self.active = false
+          return "finish"
+        end
+        self.revealed = self.revealed + 1
+        return "print"
+      else
+        if self.arrowDelay ~= 0 then
+          self.arrowDelay = self.arrowDelay - 1
+        else
+          self.arrowFrame = ARROW_FRAMES[self.arrowIdx + 1]
+          self.arrowDelay = CURSOR_DELAY
+          self.arrowIdx = (self.arrowIdx + 1) % 4
+        end
         if newAB then
           Audio.playSe(SE.SE_SELECT)
-          if self.page < #self.pages then
-            self.page = self.page + 1
-            self.revealed = 0
-            self.pos = 1
-            self.waiting = false
-            self.delay = 0
-            self.total = charCount(self.pages[self.page])
-          else
-            self.active = false
-          end
+          self.page = self.page + 1
+          self.revealed = 0
+          self.arrowFrame = nil
+          self.state = "char"
         end
-        return
-      end
-
-      local speed = tonumber(scene.textSpeed) or 4
-      if speed < 1 then speed = 1 end
-      if heldAB then speed = 0 end
-
-      if self.delay > 0 then
-        self.delay = self.delay - 1
-        return
-      end
-
-      if self.revealed >= self.total then
-        self.waiting = true
-        return
-      end
-
-      self.revealed = self.revealed + 1
-      self.delay = speed - 1
-      if newAB then
-        self.delay = 0
+        return "update"
       end
     end
 
-    function printer:draw(x, y, opts)
+    function p:run(newAB, heldAB)
+      if not self.active then return end
+      for _ = 1, 64 do
+        if self:render(newAB, heldAB) ~= "repeat" then return end
+      end
+    end
+
+    function p:draw(x, y, opts)
       local pageText = self.pages[self.page] or ""
-      FrlgFont.draw(pageText, x, y, {
-        maxWidth = opts.maxWidth,
-        colors = opts.colors or FrlgFont.COLOR.NORMAL,
-        linePitch = FrlgFont.LINE_PITCH,
+      local _, endX, endY = FrlgFont.draw(pageText, x, y, {
+        maxWidth = opts.maxWidth or textWidth,
         limitChars = self.revealed,
+        colors = opts.colors or FrlgFont.COLOR.NORMAL,
+        linePitch = opts.linePitch or FrlgFont.LINE_PITCH,
       })
-
-      -- FireRed displays its red continuation arrow when the current
-      -- dialogue page has finished printing and another page follows.
-      -- Do not show it on the final page (including pages that lead into
-      -- a question/menu).
-      if self.waiting and self.page < #self.pages then
-        local lineCount = 1
-        for _ in pageText:gmatch("\\n") do
-          lineCount = lineCount + 1
-        end
-
-        local arrowX = x + (opts.maxWidth or 200) - 8
-        local arrowY = y + lineCount * FrlgFont.LINE_PITCH + 2
-        love.graphics.setColor(1, 0, 0, 1)
-        love.graphics.polygon(
-          "fill",
-          arrowX - 4, arrowY - 3,
-          arrowX + 4, arrowY - 3,
-          arrowX, arrowY + 3
-        )
-        love.graphics.setColor(1, 1, 1, 1)
+      if self.state == "clear" and self.arrowFrame and endX then
+        Chrome.promptArrow(endX, endY, self.arrowFrame)
       end
     end
 
+    return p
+  end
+
+  local function rawPrint(scene, text)
+    text = text:gsub("\\\\f", "\\f")
+    text = text:gsub("\\\\n", "\\n")
+    text = text:gsub("\\\\p", "\\f")
+    text = text:gsub("\\\\l", "\\n")
+    text = text:gsub("{PLAYER}", scene.playerName or "RED")
+
+    local _, _, dialogWidth = Chrome.dialogueWindow()
+    local textWidth = (dialogWidth or Chrome.DLG_W or 26) * 8
+    local printer = newPrinter(text, tonumber(scene.textSpeed) or 4, true, textWidth)
     scene.win.dialog = true
     scene.printer = printer
   end
@@ -467,8 +502,12 @@ return function(mod)
     end
 
     self:clearDialog()
+    self:loadPlayerPic()
+    t.data.picPosX = 0
+    self.coordOffsetX = 0
+    self.bg2X = 0
     self:createFadeInTask(t, 2)
-    t.func = Scene.Task_OakSpeech_ReshowPlayersPic
+    t.func = Scene.Task_OakSpeech_LetsGo
   end
 
   local function setVar(name, value)
@@ -494,9 +533,10 @@ return function(mod)
     if not row then return end
 
     session.vars[0x4031] = row.index
-    session.vars[0x4050] = 1
+    session.vars[0x4050] = 3
     session.vars[0x4055] = 6
     session.vars[0x4057] = 2
+    session.vars[0x4058] = 2 -- Daisy/Town Map scene: already received
 
     session.flags[40] = true
     session.flags[41] = true
@@ -504,10 +544,18 @@ return function(mod)
     session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
-    -- FireRed's special flags are what actually expose these start-menu
-    -- entries.  Keep these separate from the normal event flags.
-    session.flags[0x828] = true -- Pokémon menu
-    session.flags[0x829] = true -- Pokédex menu
+
+    -- These are FireRed system flags, not ordinary Lua save-table flags.
+    -- Set them in the live scripting store so the engine actually sees
+    -- the Pokémon menu, Pokédex, and Running Shoes state.
+    if Space.store then
+      if Flags.IDS.SYS_POKEMON_GET then
+        Flags.setFlag(Space.store, nil, Flags.IDS.SYS_POKEMON_GET, true)
+      end
+      if Flags.IDS.SYS_POKEDEX_GET then
+        Flags.setFlag(Space.store, nil, Flags.IDS.SYS_POKEDEX_GET, true)
+      end
+    end
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -692,6 +740,7 @@ return function(mod)
       -- post-intro state, so never leave the vanilla grab trigger armed.
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
@@ -719,8 +768,15 @@ return function(mod)
     Field.lock("alternate_oak_mom")
 
     local function finish()
-      mod.save:set("firered_mom_gift_done", true)
-      Field.unlock("alternate_oak_mom")
+      -- Mom starts at (8,4), so after walking to the player at (10,3)
+      -- she returns to her original spot before the field is released.
+      handle:scriptMove("left", 2, function()
+        handle:scriptMove("down", 1, function()
+          handle:face("up")
+          mod.save:set("firered_mom_gift_done", true)
+          Field.unlock("alternate_oak_mom")
+        end)
+      end)
     end
 
     local function giveShoes()
@@ -728,6 +784,9 @@ return function(mod)
       -- behaviour is controlled by the special system flag 0x82F.
       session.flags = session.flags or {}
       session.flags[0x82F] = true
+      if Space.store and Flags.IDS.SYS_B_DASH then
+        Flags.setFlag(Space.store, nil, Flags.IDS.SYS_B_DASH, true)
+      end
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
       Audio.waitFanfare(function()
         Message.show((session.player and session.player.name or "RED") ..
@@ -752,7 +811,7 @@ return function(mod)
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
-      Audio.playFanfare("MUS_LEVEL_UP")
+      Audio.playFanfare("MUS_OBTAIN_ITEM")
       Audio.waitFanfare(function()
         Message.show((session.player and session.player.name or "RED") ..
           " got 10 POKé BALLs!", {
@@ -814,11 +873,12 @@ return function(mod)
     if not mod.save:get("firered_starter") then return end
     if not mod.save:get("firered_mom_gift_done") then return end
 
-    local Player = require("src.core.game3.player")
-    local x, y = Player.cellX, Player.cellY
-    -- Mirror the Gen 1 implementation: the encounter fires only on the
-    -- actual north exit tile, not merely anywhere near the top of town.
-    if tonumber(y) ~= 1 then return end
+    local x, y = tonumber(ev.x), tonumber(ev.y)
+    -- FireRed's Pallet Town Oak triggers are exactly the two north-exit
+    -- tiles at (12,1) and (13,1).  world.stepped is emitted before the
+    -- overworld processes the connection, so locking here prevents the
+    -- player from leaving town.
+    if y ~= 1 or (x ~= 12 and x ~= 13) then return end
     startRivalBattle(mapId, x, y)
   end)
 end
