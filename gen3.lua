@@ -6,6 +6,7 @@ return function(mod)
   local FrlgFont = require("src.ui.game3.frlg_font")
   local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
+  local Song = require("src.core.game3.song_ids")
   local Flags = require("src.core.game3.scripting.flags")
   local Space = require("src.core.game3.scripting.space")
   local Trainers = require("src.core.game3.scripting.trainers")
@@ -713,16 +714,19 @@ return function(mod)
       moveHome()
     end
 
-    local function showItem(itemText, explanation, fanfare, done)
+    local giftStage = nil
+
+    local function showItem(stage, itemText, explanation, fanfare, done)
+      if giftStage == stage then return end
+      giftStage = stage
       Message.show(itemText, {
         npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         done = function()
-          local song = fanfare
-          Audio.playFanfare(song)
+          pcall(Audio.playFanfare, fanfare)
           Message.show(explanation, {
             npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
             done = function()
-              Audio.waitFanfare(done)
+              if done then Audio.waitFanfare(done) end
             end,
           })
         end,
@@ -733,20 +737,20 @@ return function(mod)
       if Flags.IDS.SYS_B_DASH then
         Flags.setFlag(Space.store, nil, Flags.IDS.SYS_B_DASH, true)
       end
-      showItem(
+      showItem("shoes",
         playerName(liveGame) .. " got the RUNNING SHOES!",
         "They let you run while you hold the B Button.",
-        258,
+        Song.MUS_OBTAIN_ITEM,
         finish
       )
     end
 
     local function giveTeachyTv()
       Bag.add(session.bag, 366, 1)
-      showItem(
+      showItem("teachy_tv",
         playerName(liveGame) .. " got the TEACHY TV!",
         "You can use it if you need help.",
-        318,
+        Song.MUS_OBTAIN_KEY_ITEM,
         giveShoes
       )
     end
@@ -756,20 +760,20 @@ return function(mod)
       if Flags.IDS.EVENT_GOT_TOWN_MAP then
         Flags.setFlag(Space.store, nil, Flags.IDS.EVENT_GOT_TOWN_MAP, true)
       end
-      showItem(
+      showItem("town_map",
         playerName(liveGame) .. " got a TOWN MAP!",
         "It shows the towns and routes you've visited.",
-        "MUS_OBTAIN_KEY_ITEM",
+        Song.MUS_OBTAIN_KEY_ITEM,
         giveTeachyTv
       )
     end
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
-      showItem(
+      showItem("poke_balls",
         playerName(liveGame) .. " got 10 POKé BALLs!",
         "You can use POKé BALLs to catch wild POKéMON.",
-        "MUS_OBTAIN_ITEM",
+        Song.MUS_OBTAIN_ITEM,
         giveMap
       )
     end
