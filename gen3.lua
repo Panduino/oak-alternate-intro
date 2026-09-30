@@ -864,22 +864,29 @@ return function(mod)
   -- The stepped event was the last known working trigger.  Once it fires,
   -- startRivalBattle locks the field, so the player cannot keep sprinting
   -- through the encounter while Rival is walking in.
-  mod.events:on("world.stepped", function(ev)
-    if encounterRunning or mod.save:get("firered_pallet_rival_done") then return end
-    if not liveGame or not ev.mapId then return end
-
-    local mapId = tostring(ev.mapId)
-    if not mapId:find("PALLET_TOWN", 1, true)
-        or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
-      return
+  -- Intercept the actual northbound player step before the engine can
+  -- perform the Route 1 connection. This is the same point where vanilla
+  -- Oak's Pallet Town trigger prevents the player from leaving town.
+  mod.hooks:wrap("movement.collision", function(next, allowed, ctx)
+    if not allowed or encounterRunning or mod.save:get("firered_pallet_rival_done") then
+      return next(allowed, ctx)
     end
-    if not mod.save:get("firered_starter")
-        or not mod.save:get("firered_mom_gift_done") then
-      return
+    if not liveGame or not ctx or not ctx.map or tostring(ctx.map.id) ~= "PALLET_TOWN" then
+      return next(allowed, ctx)
+    end
+    if not mod.save:get("firered_starter") or not mod.save:get("firered_mom_gift_done") then
+      return next(allowed, ctx)
+    end
+    if ctx.mover ~= liveGame.overworld.player then
+      return next(allowed, ctx)
     end
 
-    local x, y = tonumber(ev.x), tonumber(ev.y)
-    if (x ~= 12 and x ~= 13) or y > 2 then return end
-    startRivalBattle(mapId, x, y)
+    local fromX, fromY = tonumber(ctx.fromX), tonumber(ctx.fromY)
+    if ctx.dir ~= "up" or (fromX ~= 12 and fromX ~= 13) or fromY > 2 then
+      return next(allowed, ctx)
+    end
+
+    startRivalBattle("PALLET_TOWN", fromX, fromY)
+    return false
   end)
-end
+endend
