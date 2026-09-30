@@ -4,7 +4,6 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
-  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
@@ -51,8 +50,7 @@ return function(mod)
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
 
     local pages = {}
-    local _, _, dialogWidth = Chrome.dialogueWindow()
-    local textWidth = math.max(1, dialogWidth * 8 - 8)
+    local textWidth = 200
     for page in (text .. "\f"):gmatch("(.-)\f") do
       pages[#pages + 1] = FrlgFont.wrap(page, textWidth)
     end
