@@ -786,7 +786,7 @@ return function(mod)
       -- has completely finished.
       handle:scriptMove("left", 2, function()
         handle:scriptMove("down", 1, function()
-          handle:face("up")
+          handle:face("left")
           mod.save:set("firered_mom_gift_done", true)
           momEventRunning = false
           Field.unlock("alternate_oak_mom")
