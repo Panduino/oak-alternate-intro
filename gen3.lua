@@ -1171,9 +1171,9 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        -- The north Route 1 exit is two tiles wide. Intercept either
-        -- tile immediately before the exit, while still in Pallet Town.
-        if x and y and y == 1 and (x == 12 or x == 13) then
+        -- Trigger one row before the Route 1 exit, so the event
+        -- starts safely inside Pallet Town instead of at the seam.
+        if x and y and y == 2 and (x == 12 or x == 13) then
           if startRivalBattle(x, y) then
             return "blocked", "alternate_rival"
           end
