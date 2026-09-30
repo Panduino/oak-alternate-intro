@@ -647,21 +647,21 @@ return function(mod)
 
     local function finish()
       local function faceHome()
-        handle:face("left")
+        Objects.scriptFace(handle, "left")
         momDone()
       end
 
-      local x = tonumber(handle.cellX) or 8
-      local y = tonumber(handle.cellY) or 4
       local function moveHome()
+        local x = tonumber(handle.cellX) or 8
+        local y = tonumber(handle.cellY) or 4
         if x < 8 then
-          handle:scriptMove("right", 1, moveHome)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "right" } }, moveHome)
         elseif x > 8 then
-          handle:scriptMove("left", 1, moveHome)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "left" } }, moveHome)
         elseif y < 4 then
-          handle:scriptMove("down", 1, moveHome)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "down" } }, moveHome)
         elseif y > 4 then
-          handle:scriptMove("up", 1, moveHome)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "up" } }, moveHome)
         else
           faceHome()
         end
@@ -719,10 +719,10 @@ return function(mod)
       local my = tonumber(handle.cellY) or 4
 
       local function facePlayer()
-        if px < mx then handle:face("left")
-        elseif px > mx then handle:face("right")
-        elseif py < my then handle:face("up")
-        else handle:face("down") end
+        if px < mx then Objects.scriptFace(handle, "left")
+        elseif px > mx then Objects.scriptFace(handle, "right")
+        elseif py < my then Objects.scriptFace(handle, "up")
+        else Objects.scriptFace(handle, "down") end
 
         Message.show(
           "Right. All kids leave home someday.\\n" ..
@@ -737,13 +737,13 @@ return function(mod)
         mx = tonumber(handle.cellX) or mx
         my = tonumber(handle.cellY) or my
         if mx < px then
-          handle:scriptMove("right", 1, moveToPlayer)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "right" } }, moveToPlayer)
         elseif mx > px then
-          handle:scriptMove("left", 1, moveToPlayer)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "left" } }, moveToPlayer)
         elseif my < py then
-          handle:scriptMove("down", 1, moveToPlayer)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "down" } }, moveToPlayer)
         elseif my > py then
-          handle:scriptMove("up", 1, moveToPlayer)
+          Objects.startTrack(handle.localId, { { kind = "step", dir = "up" } }, moveToPlayer)
         else
           facePlayer()
         end
