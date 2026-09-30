@@ -430,7 +430,7 @@ return function(mod)
         "I have a request for you.\f" ..
         "I want you to help me with\nmy research.\f" ..
         "I've given you an invention\nof mine, the POKéDEX!\f" ..
-        "It records information on\nPOKéMON you've seen or\ncaught!\f" ..
+        "It automatically records\ndata on POKéMON you've\nseen or caught!\f" ..
         "It's a hi-tech encyclopedia!\f" ..
         "Take this with you, {PLAYER}!\f" ..
         "It will help you on your journey.\f" ..
