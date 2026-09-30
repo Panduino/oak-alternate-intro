@@ -691,25 +691,42 @@ return function(mod)
       end
     end
 
-    -- Start from the south side of Pallet Town, just like vanilla Oak.
-    -- The live EventObject is the actual Pallet Town Oak object; only its
-    -- appearance was changed to Rival.
-    pathBetween(handle, x, 2, function(ok)
+    -- Match FireRed's actual Pallet Town Oak movement script.  Do not
+    -- pathfind this approach: vanilla uses a fixed applymovement sequence,
+    -- and Game3's scriptMove is the same blocking movement primitive used by
+    -- those scripts.
+    local approach
+    if x == 12 then
+      -- PalletTown_Movement_OakEnterLeft
+      approach = { "up", "up", "right", "up", "up", "right", "up", "up" }
+    else
+      -- PalletTown_Movement_OakEnterRight
+      approach = { "right", "up", "up", "right", "up", "up", "right", "up", "up" }
+    end
+
+    local function walkApproach(i)
+      if i > #approach then
+        handle:face("down")
+        rivalDialog(
+          playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
+          "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
+          "Come on, I'll take you on!",
+          beginBattle
+        )
+        return
+      end
+
+      local ok = handle:scriptMove(approach[i], 1, function()
+        walkApproach(i + 1)
+      end)
       if not ok then
         removeRival()
         encounterRunning = false
         require("src.core.game3.field").unlock("alternate_oak_rival")
-        return
       end
+    end
 
-      handle:face("up")
-      rivalDialog(
-        playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
-        "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
-        "Come on, I'll take you on!",
-        beginBattle
-      )
-    end)
+    walkApproach(1)
 
     return true
   end
