@@ -138,6 +138,7 @@ return function(mod)
   --------------------------------------------------------------------------
 
   local originalOakSpeechReshowPlayersPic = Scene.Task_OakSpeech_ReshowPlayersPic
+  local originalOakSpeechFadeOutBGM = Scene.Task_OakSpeech_FadeOutBGM
 
   Scene.Task_OakSpeech_ReshowPlayersPic = function(self, t)
     local d = t.data
@@ -332,7 +333,7 @@ return function(mod)
     if Message.isOpen() then return end
     clearMessage()
     t.data.timer = 0
-    t.func = originalOakSpeechReshowPlayersPic
+    t.func = originalOakSpeechFadeOutBGM
   end
 
   --------------------------------------------------------------------------
