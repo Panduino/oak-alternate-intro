@@ -213,7 +213,7 @@ return function(mod)
 
     if t.data.page == nil then
       t.data.page = 1
-      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your own!")
+      rawPrint(self, "Before you leave\\fYou should have a\\nPOKéMON of your own!")
       return
     end
 
