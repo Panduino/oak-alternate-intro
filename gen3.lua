@@ -363,6 +363,7 @@ return function(mod)
     handle.invisible = false
     handle.scriptBusy = false
     handle:placeAt(x, startY, "up")
+    Audio.playSong(315)
     return handle, startY
   end
 
