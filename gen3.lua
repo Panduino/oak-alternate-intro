@@ -453,6 +453,13 @@ return function(mod)
     end
   end
 
+  local function setFlag(name, value)
+    local id = Flags.IDS[name]
+    if id then
+      Flags.setFlag(Space.store, nil, id, value)
+    end
+  end
+
   local function applyProgress(session)
     session.vars = session.vars or {}
     session.flags = session.flags or {}
@@ -472,6 +479,9 @@ return function(mod)
     session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
+
+    setFlag("FLAG_GOT_OAKS_PARCEL", true)
+    setFlag("FLAG_OAK_GOT_PARCEL", true)
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -646,6 +656,8 @@ return function(mod)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setFlag("FLAG_GOT_OAKS_PARCEL", true)
+      setFlag("FLAG_OAK_GOT_PARCEL", true)
     end
   end)
 
