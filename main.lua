@@ -1,11 +1,3 @@
--- Alternate Oak intro:
--- choose Bulbasaur, Charmander or Squirtle during Oak's opening speech,
--- immediately receive it (with the normal gift/Pokédex bookkeeping),
--- choose a nickname, name the rival, then receive the Pokédex explanation.
---
--- No starter artwork is bundled here. The preview uses OakSpeech's normal
--- Pokémon sprite resolver, which follows the imported game data and the same
--- sprite override path used by compatible mods.
 
 local function installGen3(mod)
   local source = mod:read("gen3.lua")
@@ -24,17 +16,9 @@ return function(mod)
     return installGen3(mod)
   end
 
-  -- The stock OakSpeech choice uses the generic Menu widget. The widget
-  -- does not have a per-item preview API, so this mod adds a narrowly scoped
-  -- preview to the three-starter menu only. The sprite itself is resolved
-  -- through OakSpeech.resolvePic -> pokemon.Sprites.path, so pokemon.sprite
-  -- hooks from other mods remain in the chain.
   local activeStarterSpeech = nil
   local Menu = require("src.ui.Menu")
   local Assets = require("src.render.Assets")
-  -- Kanto Gear mirrors the active native choice/naming UI onto its bottom
-  -- screen. When it is installed, keep those controls off the game screen
-  -- so the upper screen can be used for the Pokemon/art itself.
   local kantoGearInstalled = mod.find and mod.find("kanto_gear") ~= nil
   local originalMenuNew = Menu.new
   local originalMenuUpdate = Menu.update
@@ -70,9 +54,6 @@ return function(mod)
   local function resolvePokemonArt(speech, species)
     if not speech or not species then return nil, false end
 
-    -- G9 Battle Sprites exposes its front frame directly. Use that same
-    -- resolved art for both the hover preview and the later nickname prompt,
-    -- so the starter never switches back to a ROM sprite between screens.
     local g9 = mod.find and mod:find("g9-battle-sprites")
     if g9 and g9.exports and type(g9.exports.frontArt) == "function" then
       local ok, img = pcall(g9.exports.frontArt, { species = species })
@@ -99,9 +80,6 @@ return function(mod)
     speech.picFlip = false
     speech.picTrueColor = trueColor
 
-    -- Play the selected starter's cry exactly once when the highlighted
-    -- option changes. Do not tie this to the art load, because G9 art can be
-    -- built lazily and would otherwise retrigger the cry.
     if menu._alternateOakLastCrySpecies ~= species then
       menu._alternateOakLastCrySpecies = species
       require("src.core.Sound").playCry(speech.game.data, species)
@@ -124,8 +102,6 @@ return function(mod)
     local previousIndex = self.index
     originalMenuUpdate(self, dt)
     if self._alternateOakStarterSpeech then
-      -- G9 Battle Sprites builds its front frame lazily, so retry even when
-      -- the selection index has not changed.
       if self.index ~= previousIndex or not self._alternateOakStarterSpeech.pic then
         updateStarterPreview(self)
       end
@@ -133,9 +109,6 @@ return function(mod)
   end
 
   Menu.draw = function(self)
-    -- Kanto Gear renders the native starter choices on its bottom screen.
-    -- Leave the native menu hidden there; the preview itself remains on the
-    -- game screen above it.
     if not (kantoGearInstalled and self._alternateOakIntroChoice) then
       originalMenuDraw(self)
     end
@@ -144,9 +117,6 @@ return function(mod)
     local img = speech and speech.pic
     if not img then return end
 
-    -- The normal 56x56 OakSpeech picture area is behind the choice box.
-    -- Move the preview into the open left-hand area and scale it to 48x48
-    -- so the actual resolved front sprite remains visible beside the menu.
     local w, h = img:getDimensions()
     if w <= 0 or h <= 0 then return end
 
@@ -158,8 +128,6 @@ return function(mod)
     local x = centerX - (w * scale) / 2
     local y = centerY - (h * scale) / 2
 
-    -- Some G9 frames contain opaque pixels near the edge of their baked
-    -- canvas. Never allow the preview to enter the dialogue area below it.
     local clipBottom = kantoGearInstalled and 96 or 88
     love.graphics.setScissor(0, 0, 160, clipBottom)
     love.graphics.setColor(1, 1, 1, 1)
@@ -275,9 +243,6 @@ return function(mod)
                 done()
               end,
             })
-            -- Kanto Gear identifies the native Gen 1 naming surface by this
-            -- screenId. Without it, its generic level-up fallback sees the
-            -- same party Pokemon and replaces the keyboard on the bottom.
             naming.screenId = "NamingScreen"
             game.stack:push(naming)
           end,
@@ -351,9 +316,6 @@ return function(mod)
   end)
 
   mod.events:on("intro.oak_speech.step", function(ev)
-    -- Leaf Avatar's boy/girl choice is another native Menu instance in the
-    -- same intro. Keep its speech active long enough for Kanto Gear to own
-    -- that menu on the bottom screen too.
     if ev.step and (ev.step.id == "alternate_intro_starter_choice"
         or ev.step.id == "leaf_avatar_pick") then
       activeStarterSpeech = ev.speech
@@ -379,9 +341,6 @@ return function(mod)
 
   local RIVAL_OBJECT_INDEX = 99
 
-  -- This scripted Rival battle uses the same no-blackout behavior as the
-  -- vanilla Oak's Lab starter battle. The BattleState check must happen
-  -- during BattleState:enter(), before battle.started exists.
   local BattleState = require("src.battle.BattleState")
   local originalIsOaksLabStarterRival = BattleState.isOaksLabStarterRival
   BattleState.isOaksLabStarterRival = function(battle)
@@ -400,10 +359,6 @@ return function(mod)
     return originalIsOaksLabStarterRival(battle)
   end
 
-  -- Commands.start_battle calls OverworldState:afterBattle from its
-  -- completion callback. Without this matching special case, a loss on
-  -- PALLET_TOWN would still trigger the normal blackout/warp even though
-  -- BattleState correctly skipped the blackout screen above.
   local OverworldState = require("src.world.OverworldController")
   local originalAfterBattle = OverworldState.afterBattle
   OverworldState.afterBattle = function(ow, result, battle)
@@ -426,9 +381,6 @@ return function(mod)
     if flags.MOD_ALTERNATE_INTRO_RIVAL_BATTLE_DONE then
       battle.alternateOakIntroCanLose = true
 
-      -- Keep the scripted opening battle gentle even when other mods change
-      -- the starters' normal level-up moves. The Rival may only use the
-      -- basic attack plus a basic stat-lowering move.
       local starter = mod.save:get("starter")
       local movePair = ({
         BULBASAUR = {
@@ -452,10 +404,6 @@ return function(mod)
     end
   end)
 
-  -- The vanilla Pallet Town Oak encounter starts hidden at (8,5), below
-  -- the player's camera, then walks up to the tile immediately below the
-  -- player. Reuse that staging for the Rival so this encounter has the same
-  -- offscreen entrance rather than popping the Rival into view.
   local function spawnRival(ow, game)
     local NPC = require("src.world.NPC")
     local obj = {
@@ -533,9 +481,6 @@ return function(mod)
     despawnRival(ow, ow:npcByIndex(RIVAL_OBJECT_INDEX))
   end)
 
-  -- Match the vanilla OaksLabRivalStartsExitScript: after the battle the
-  -- Rival says his parting line, sidesteps around the player, walks toward
-  -- the Route 1 exit, then disappears off the Pallet Town map.
   mod.commands:register("alternate_oak_intro:rival_depart", function(ctx)
     local ow = ctx.overworld
     local rival = ow and ow:npcByIndex(RIVAL_OBJECT_INDEX)
@@ -544,9 +489,6 @@ return function(mod)
     local playerX = ow.player.cellX
     local playerY = ow.player.cellY
 
-    -- Pick the side that actually leads into the walkable corridor above
-    -- the player. This keeps the Rival from stepping onto the wall when
-    -- the player is standing on the left-hand Route 1 exit grass.
     local preferredSide = playerX <= 8 and "right" or "left"
     local sides = { preferredSide, preferredSide == "right" and "left" or "right" }
     local side
@@ -562,8 +504,6 @@ return function(mod)
       end
     end
 
-    -- Fall back to the original side choice if neither route can be
-    -- identified as walkable.
     side = side or preferredSide
 
     local steps = { side, "up", "up", "up", "up", "up" }
@@ -600,9 +540,6 @@ return function(mod)
 
     local rival = spawnRival(ow, game)
 
-    -- Start the Rival encounter music as soon as he appears, before his
-    -- entrance walk begins. The battle music should not wait until he reaches
-    -- the player.
     require("src.core.Music").play(game.data, "Music_MeetRival")
 
     local starter = mod.save:get("starter")
@@ -626,9 +563,6 @@ return function(mod)
         "_OaksLabRivalIPickedTheWrongPokemonText" },
       { "start_battle", "trainer", "OPP_RIVAL1", rivalParty },
       { "heal_party" },
-      -- The saved end-battle text already handles the Rival's win line on
-      -- the battle screen. This shared line is the normal post-battle exit
-      -- dialogue and must play after either a win or a loss.
       { "show_text", "OK! I'll make my POKéMON\nfight to toughen it up!\n{PLAYER}! Smell you later!" },
       { "alternate_oak_intro:rival_depart" },
       { "play_default_music" },
@@ -639,9 +573,6 @@ return function(mod)
       ow.runner:run(rows, { npc = rival })
     end
 
-    -- Match Pallet Town's vanilla Oak entrance: the Rival is initially
-    -- below the visible area, pauses briefly, then walks to the tile below
-    -- the player before speaking.
     rival.facing = "up"
     ow.emote = {
       frames = 6,
@@ -662,18 +593,11 @@ return function(mod)
     return true
   end
 
-  -- The alternate intro completes Oak's opening sequence for the player,
-  -- so Oak should remain in his lab afterward just as he would after the
-  -- normal Pokédex handoff. This also leaves his normal dialogue active,
-  -- including the Pokédex progress rating.
   mod.content.map_scripts:register("OAKS_LAB", {
     onEnter = function(game, ow)
       local flags = game.save.flags or {}
       if not flags.EVENT_GOT_POKEDEX then return end
 
-      -- The alternate intro skips the vanilla Poké Ball handoff sequence,
-      -- so set the same progression flag that makes Oak offer his Pokédex
-      -- rating when the player talks to him.
       flags.EVENT_PALLET_AFTER_GETTING_POKEBALLS = true
 
       local Commands = require("src.script.Commands")
@@ -683,8 +607,6 @@ return function(mod)
         overworld = ow,
       }, "OAKS_LAB", "OAKSLAB_OAK1")
 
-      -- The alternate intro's Rival battle already happened outside Pallet
-      -- Town. He should not remain in the lab or trigger the vanilla lab battle.
       Commands.hide_object({
         game = game,
         save = game.save,
@@ -695,16 +617,11 @@ return function(mod)
 
   mod.content.map_scripts:register("PALLET_TOWN", {
     onStep = function(game, ow, x, y)
-      -- Red's Route 1 exit is y == 1. The encounter is armed only after
-      -- Mom's one-time departure scene, so entering the upper exit before
-      -- that point remains completely vanilla.
       if y ~= 1 then return false end
       return runFirstPalletRivalBattle(game, ow, x)
     end,
   })
 
-  -- The Town Map is now given during Mom's scene, so Daisy should
-  -- behave exactly as if she had already handed the map to the player.
   mod.content.map_scripts:register("BLUES_HOUSE", {
     talk = {
       TEXT_BLUESHOUSE_DAISY_SITTING = {
@@ -714,8 +631,6 @@ return function(mod)
   })
 
   mod.content.map_scripts:register("REDS_HOUSE_1F", {
-    -- Fire as soon as the player enters the first floor from the bedroom,
-    -- so the Mom scene cannot be missed while walking off the stairs.
     onEnter = function(game, ow)
       local flags = game.save.flags or {}
       if flags.MOD_ALTERNATE_INTRO_MOM_GIFT then return end
@@ -726,9 +641,6 @@ return function(mod)
       local mom = ow:npcByIndex(1)
       if not mom then return end
 
-      -- The player is now standing at the bottom of the stairs when this
-      -- fires. Walk Mom to the tile directly in front of the player rather
-      -- than using her old fixed one-tile movement.
       local originalMomX = mom.cellX
       local originalMomY = mom.cellY
       local targetX = ow.player.cellX
