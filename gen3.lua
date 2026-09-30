@@ -318,6 +318,66 @@ return function(mod)
     t.func = Scene.Task_AlternateOakStarterIntro
   end
 
+  Scene.Task_OakSpeech_AskRivalsName = function(self, t)
+    if t.data.picFadeState == 0 then return end
+    self:loadTrainerPic("rival")
+    self:oakPrint("rival_intro")
+    self.hasPlayerBeenNamed = true
+    t.func = Scene.Task_OakSpeech_MoveRivalDisplayNameOptions
+  end
+
+  Scene.Task_OakSpeech_FadeOutRivalPic = function(self, t)
+    if self:printerActive() then return end
+    self:clearDialog()
+    self:createFadeInTask(t, 2)
+    t.func = Scene.Task_AlternateOakPokedexSetup
+  end
+
+  function Scene.Task_AlternateOakPokedexSetup(self, t)
+    if t.data.picFadeState == 0 then return end
+    self:clearTrainerPic()
+    self:loadTrainerPic("oak")
+    t.data.picPosX = 0
+    self.coordOffsetX = 0
+    self.bg2X = 0
+    self:createFadeOutTask(t, 2)
+    t.func = Scene.Task_AlternateOakPokedexText
+  end
+
+  function Scene.Task_AlternateOakPokedexText(self, t)
+    if t.data.picFadeState == 0 then return end
+
+    if t.data.page == nil then
+      t.data.page = 1
+      rawPrint(self, "I have a request for you.\\fI want you to help me with\\nmy research.")
+      return
+    end
+
+    if self:printerActive() then return end
+
+    if t.data.page == 1 then
+      t.data.page = 2
+      rawPrint(self,
+        "I've given you an invention\\nof mine, the POKéDEX!\\f" ..
+        "It automatically records data\\non POKéMON you've seen or\\ncaught! It's a hi-tech\\nencyclopedia!")
+    elseif t.data.page == 2 then
+      t.data.page = 3
+      rawPrint(self,
+        "Take this with you, {PLAYER}!\\f" ..
+        "It will help you on your\\njourney.")
+    elseif t.data.page == 3 then
+      t.data.page = 4
+      rawPrint(self,
+        "To make a complete guide on\\nall the POKéMON in the world...\\f" ..
+        "That was my dream! But, I'm too\\nold! I can't do it! So, I want\\nyou to fulfill my dream for me!\\f" ..
+        "Get moving! This is a great\\nundertaking in POKéMON history!")
+    else
+      self:clearDialog()
+      self:createFadeInTask(t, 2)
+      t.func = Scene.Task_OakSpeech_ReshowPlayersPic
+    end
+  end
+
   local function setVar(name, value)
     local id = Flags.VAR_IDS[name]
     if id then
@@ -341,7 +401,6 @@ return function(mod)
     session.flags[42] = true
     session.flags[45] = true
     session.flags[0x829] = true
-    session.flags[0x258] = true
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -468,6 +527,9 @@ return function(mod)
         defeatText = "Not bad, " .. playerName .. "!\\nYou're pretty tough.",
         done = function()
           Party.healAll(liveGame.save.party)
+          if Flags.IDS.FLAG_BEAT_RIVAL_IN_OAKS_LAB then
+            Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_BEAT_RIVAL_IN_OAKS_LAB, true)
+          end
           rivalDialog(
             "I need to train my POKéMON more.\\n" ..
             "I'll see you around, " .. playerName .. "!",
