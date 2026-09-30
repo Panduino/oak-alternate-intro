@@ -4,6 +4,7 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
@@ -50,8 +51,10 @@ return function(mod)
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
 
     local pages = {}
+    local _, _, dialogWidth = Chrome.dialogueWindow()
+    local textWidth = math.max(1, dialogWidth * 8 - 8)
     for page in (text .. "\f"):gmatch("(.-)\f") do
-      pages[#pages + 1] = page
+      pages[#pages + 1] = FrlgFont.wrap(page, textWidth)
     end
 
     local printer = {
@@ -413,6 +416,7 @@ return function(mod)
     if self:fadeActive() then return end
     self:clearTrainerPic()
     self:loadTrainerPic("oak")
+    if self.pic then self.pic.hidden = false end
     t.data.picPosX = 0
     self.coordOffsetX = 0
     self.bg2X = 0
@@ -471,7 +475,7 @@ return function(mod)
     session.vars[0x4031] = row.index
     session.vars[0x4050] = 1
     session.vars[0x4055] = 6
-    session.vars[0x4057] = 1
+    session.vars[0x4057] = 2
 
     session.flags[40] = true
     session.flags[41] = true
@@ -479,6 +483,7 @@ return function(mod)
     session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
+    session.flags[0x828] = true
     session.flags[0x829] = true
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
@@ -574,7 +579,6 @@ return function(mod)
     local Field = require("src.core.game3.field")
     Field.lock("alternate_oak_rival")
     encounterRunning = true
-    mod.save:set("firered_pallet_rival_done", true)
     setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
 
     if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
@@ -613,9 +617,6 @@ return function(mod)
         defeatText = "Not bad, " .. playerName .. "!\\nYou're pretty tough.",
         done = function()
           Party.healAll(liveGame.save.party)
-          if Flags.IDS.FLAG_BEAT_RIVAL_IN_OAKS_LAB then
-            Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_BEAT_RIVAL_IN_OAKS_LAB, true)
-          end
           rivalDialog(
             "I need to train my POKéMON more.\\n" ..
             "I'll see you around, " .. playerName .. "!",
@@ -629,6 +630,8 @@ return function(mod)
         removeRival()
         encounterRunning = false
         require("src.core.game3.field").unlock("alternate_oak_rival")
+      else
+        mod.save:set("firered_pallet_rival_done", true)
       end
     end
 
@@ -662,7 +665,7 @@ return function(mod)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
-      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 1)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
 
@@ -682,34 +685,39 @@ return function(mod)
 
     local Message = require("src.ui.game3.message")
     local Bag = require("src.core.game3.bag")
+    local Field = require("src.core.game3.field")
     local session = liveGame.save
     session.bag = session.bag or Bag.new()
 
-    local function returnMom()
-      handle:scriptMove("up", 1, function()
-        handle:face("down")
-        mod.save:set("firered_mom_gift_done", true)
-      end)
+    Field.lock("alternate_oak_mom")
+
+    local function finish()
+      mod.save:set("firered_mom_gift_done", true)
+      Field.unlock("alternate_oak_mom")
     end
 
     local function giveMap()
       Bag.add(session.bag, 361, 1)
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Message.show((session.player and session.player.name or "RED") ..
-        " got a TOWN MAP!", {
-        npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-        done = returnMom,
-      })
+      Audio.waitFanfare(function()
+        Message.show((session.player and session.player.name or "RED") ..
+          " got a TOWN MAP!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+          done = finish,
+        })
+      end)
     end
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
       Audio.playFanfare("MUS_LEVEL_UP")
-      Message.show((session.player and session.player.name or "RED") ..
-        " got 10 POKé BALLs!", {
-        npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-        done = giveMap,
-      })
+      Audio.waitFanfare(function()
+        Message.show((session.player and session.player.name or "RED") ..
+          " got 10 POKé BALLs!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+          done = giveMap,
+        })
+      end)
     end
 
     local function talk()
@@ -725,41 +733,14 @@ return function(mod)
       })
     end
 
-    local px = tonumber(session.player and session.player.x) or 8
-    local py = tonumber(session.player and session.player.y) or 5
-    local mx, my = handle:position()
-    local steps = 0
-
-    local function walkToPlayer()
-      mx, my = handle:position()
-      if mx == px and my == py - 1 then
-        handle:face("down")
+    -- The player enters the first floor at (10, 2); Mom starts at (8, 4).
+    -- Walk her to the tile directly below the player before starting dialogue.
+    handle:scriptMove("right", 2, function()
+      handle:scriptMove("up", 1, function()
+        handle:face("up")
         talk()
-        return
-      end
-
-      local dir
-      if my > py - 1 then
-        dir = "up"
-      elseif my < py - 1 then
-        dir = "down"
-      elseif mx < px then
-        dir = "right"
-      elseif mx > px then
-        dir = "left"
-      end
-
-      if not dir or steps >= 16 or not handle:canStep(dir) then
-        handle:face("down")
-        talk()
-        return
-      end
-
-      steps = steps + 1
-      handle:scriptMove(dir, 1, walkToPlayer)
-    end
-
-    walkToPlayer()
+      end)
+    end)
   end
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
@@ -776,6 +757,7 @@ return function(mod)
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
 
@@ -787,10 +769,12 @@ return function(mod)
         or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
       return
     end
-    if ev.y > 2 or ev.x < 5 or ev.x > 18 then return end
     if not mod.save:get("firered_starter") then return end
     if not mod.save:get("firered_mom_gift_done") then return end
 
-    startRivalBattle(ev.mapId, ev.x, ev.y)
+    local Player = require("src.core.game3.player")
+    local x, y = Player.cellX, Player.cellY
+    if tonumber(y) > 2 then return end
+    startRivalBattle(mapId, x, y)
   end)
 end
