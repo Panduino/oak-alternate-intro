@@ -71,7 +71,7 @@ return function(mod)
 
   local function clearStarterMessage()
     if Message.isOpen() then
-      Message.dismiss()
+      Message.close()
     end
   end
 
