@@ -985,7 +985,8 @@ return function(mod)
       if (mapId == "PalletTown_PlayersHouse_1F"
           or mapId == "FR_PLAYERS_HOUSE_1F"
           or mapId:find("PLAYERS_HOUSE_1F", 1, true))
-          and (Player.cellX == 4 or Player.cellX == 5)
+          and (Player.cellX == 4 or Player.cellX == 5
+            or Player.cellX == 3 or Player.cellX == 6)
           and Player.cellY == 7 then
         runMomEvent()
         return "blocked", "alternate_mom"
