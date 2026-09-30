@@ -43,9 +43,12 @@ return function(mod)
   local RIVAL_OBJECT_ID = 8
 
   local function rawPrint(scene, text)
-    text = text:gsub("\\\\f", "\f")
-    text = text:gsub("\\\\n", "\n")
+    text = text:gsub("\\f", "\f")
+    text = text:gsub("\\n", "\n")
+    text = text:gsub("\\p", "\f")
+    text = text:gsub("\\l", "\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
+
     local pages = {}
     for page in (text .. "\f"):gmatch("(.-)\f") do
       pages[#pages + 1] = page
@@ -55,19 +58,14 @@ return function(mod)
       pages = pages,
       page = 1,
       active = true,
-      shown = false,
     }
 
     function printer:run(newAB)
       if not self.active then return end
-      if not self.shown then
-        self.shown = true
-        return
-      end
       if newAB then
+        Audio.playSe(SE.SE_SELECT)
         if self.page < #self.pages then
           self.page = self.page + 1
-          self.shown = false
         else
           self.active = false
         end
@@ -77,7 +75,8 @@ return function(mod)
     function printer:draw(x, y, opts)
       FrlgFont.draw(self.pages[self.page] or "", x, y, {
         maxWidth = opts.maxWidth,
-        colors = opts.colors,
+        colors = opts.colors or FrlgFont.COLOR.NORMAL,
+        linePitch = FrlgFont.LINE_PITCH,
       })
     end
 
@@ -114,20 +113,20 @@ return function(mod)
     local scale = math.min(80 / iw, 80 / ih)
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(img, 48, 68, 0, scale, scale, iw / 2, ih / 2)
+    love.graphics.draw(img, 200, 68, 0, scale, scale, iw / 2, ih / 2)
   end
 
   local function showStarterMenu(self)
     self.win.menu = {
       kind = "starter",
-      left = 12,
+      left = 2,
       top = 4,
-      width = 16,
+      width = 18,
       height = 8,
       items = {
-        { "", 8, 1 },
-        { "", 8, 17 },
-        { "", 8, 33 },
+        { "BULBASAUR", 8, 1 },
+        { "CHARMANDER", 8, 17 },
+        { "SQUIRTLE", 8, 33 },
       },
       cursorX = 0,
       cursorY = 1,
@@ -143,7 +142,7 @@ return function(mod)
     if self:fadeActive() then return end
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
     rawPrint(self,
-      "Before you leave, you should have\\na POKéMON of your own!\\f" ..
+      "Before you leave,\\nyou should have a\\nPOKéMON of your own!\\f" ..
       "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?")
     t.func = Scene.Task_AlternateOakStarterInput
   end
@@ -177,21 +176,26 @@ return function(mod)
     self._alternateStarterMenu = false
     self:clearDialog()
     rawPrint(self,
-      ("A %s will be a great\\npartner for you!\\f" ..
-      "Would you like to\\ngive it a nickname?"):format(row.name))
+      ("A %s will be a great\\npartner for you!"):format(row.name))
     t.func = Scene.Task_AlternateOakStarterNaming
   end
 
   function Scene.Task_AlternateOakStarterNaming(self, t)
-    if self:printerActive() then return end
-
     local row = starterRow(self)
     if not row then
       t.func = Scene.Task_OakSpeech_FadeInRivalPic
       return
     end
 
-    self:clearDialog()
+    if not t.data.questionShown then
+      if self:printerActive() then return end
+      rawPrint(self, ("Would you like to give\nyour %s a nickname?"):format(row.name))
+      t.data.questionShown = true
+      return
+    end
+
+    if self:printerActive() then return end
+
     self._alternateStarterNamingTask = t
     self.win.menu = {
       kind = "yesno",
@@ -325,14 +329,6 @@ return function(mod)
     t.func = Scene.Task_AlternateOakStarterIntro
   end
 
-  Scene.Task_OakSpeech_AskRivalsName = function(self, t)
-    if t.data.picFadeState == 0 then return end
-    self:loadTrainerPic("rival")
-    self:oakPrint("rival_intro")
-    self.hasPlayerBeenNamed = true
-    t.func = Scene.Task_OakSpeech_MoveRivalDisplayNameOptions
-  end
-
   Scene.Task_OakSpeech_FadeOutRivalPic = function(self, t)
     if self:printerActive() then return end
     self:clearDialog()
@@ -353,36 +349,28 @@ return function(mod)
 
   function Scene.Task_AlternateOakPokedexText(self, t)
     if t.data.picFadeState == 0 then return end
+    if self:printerActive() then return end
 
     if t.data.page == nil then
       t.data.page = 1
-      rawPrint(self, "I have a request for you.\\fI want you to help me with\\nmy research.")
+      rawPrint(self,
+        "I have a request for you.\f" ..
+        "I want you to help me with\nmy research.\f" ..
+        "I've given you an invention\nof mine, the POKéDEX!\f" ..
+        "It automatically records data\non POKéMON you've seen or\ncaught!\f" ..
+        "It's a hi-tech encyclopedia!\f" ..
+        "Take this with you, {PLAYER}!\f" ..
+        "It will help you on your journey.\f" ..
+        "To make a complete guide on\nall the POKéMON in the world...\f" ..
+        "That was my dream! But, I'm too\nold! I can't do it!\f" ..
+        "So, I want you to fulfill my\ndream for me!\f" ..
+        "Get moving! This is a great\nundertaking in POKéMON history!")
       return
     end
 
-    if self:printerActive() then return end
-
-    if t.data.page == 1 then
-      t.data.page = 2
-      rawPrint(self,
-        "I've given you an invention\\nof mine, the POKéDEX!\\f" ..
-        "It automatically records data\\non POKéMON you've seen or\\ncaught! It's a hi-tech\\nencyclopedia!")
-    elseif t.data.page == 2 then
-      t.data.page = 3
-      rawPrint(self,
-        "Take this with you, {PLAYER}!\\f" ..
-        "It will help you on your\\njourney.")
-    elseif t.data.page == 3 then
-      t.data.page = 4
-      rawPrint(self,
-        "To make a complete guide on\\nall the POKéMON in the world...\\f" ..
-        "That was my dream! But, I'm too\\nold! I can't do it! So, I want\\nyou to fulfill my dream for me!\\f" ..
-        "Get moving! This is a great\\nundertaking in POKéMON history!")
-    else
-      self:clearDialog()
-      self:createFadeInTask(t, 2)
-      t.func = Scene.Task_OakSpeech_ReshowPlayersPic
-    end
+    self:clearDialog()
+    self:createFadeInTask(t, 2)
+    t.func = Scene.Task_OakSpeech_ReshowPlayersPic
   end
 
   local function setVar(name, value)
@@ -586,41 +574,52 @@ return function(mod)
     local handle = mod.world:npc("FR_PLAYERS_HOUSE_1F", 1)
     if not handle then return end
 
-    mod.save:set("firered_mom_gift_done", true)
-    local playerX = liveGame.save.x or 8
-    local playerY = liveGame.save.y or 5
+    local Message = require("src.ui.game3.message")
+    local Bag = require("src.core.game3.bag")
+    local session = liveGame.save
+    session.bag = session.bag or Bag.new()
 
-    local function finish()
-      local Bag = require("src.core.game3.bag")
-      local session = liveGame.save
-      session.bag = session.bag or Bag.new()
-      Bag.add(session.bag, 4, 10)
-      Message.show((session.player and session.player.name or liveGame.save.player and liveGame.save.player.name or "RED") ..
-        " got 10 POKé BALLs!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-          done = function()
-            Bag.add(session.bag, 361, 1)
-            Message.show((session.player and session.player.name or liveGame.save.player and liveGame.save.player.name or "RED") ..
-              " got a TOWN MAP!", {
-              npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-            })
-          end,
-        })
+    local function returnMom()
+      handle:face("down")
+      handle:scriptMove("up", 1, function()
+        mod.save:set("firered_mom_gift_done", true)
+      end)
     end
 
-    local Message = require("src.ui.game3.message")
-    handle:face("up")
-    Message.show("Right. All kids leave home\nsomeday. It said so on TV.", {
-      npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-      done = function()
-        Message.show("I've packed some fresh\nunderwear for you, too.\fYou'll need to be prepared\nfor your journey!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-          done = finish,
-        })
-      end,
-    })
-  end
+    local function giveMap()
+      Bag.add(session.bag, 361, 1)
+      Message.show((session.player and session.player.name or "RED") ..
+        " got a TOWN MAP!", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+        done = returnMom,
+      })
+    end
 
+    local function giveBalls()
+      Bag.add(session.bag, 4, 10)
+      Message.show((session.player and session.player.name or "RED") ..
+        " got 10 POKé BALLs!", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+        done = giveMap,
+      })
+    end
+
+    local function talk()
+      handle:face("up")
+      Message.show("Right. All kids leave home\\nsomeday. It said so on TV.", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+        done = function()
+          Message.show("I've packed some fresh\\nunderwear for you, too.\\fYou'll need to be prepared\\nfor your journey!", {
+            npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+            done = giveBalls,
+          })
+        end,
+      })
+    end
+
+    -- Mom starts one tile above the player in the FireRed house.
+    handle:scriptMove("down", 1, talk)
+  end
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
     if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
