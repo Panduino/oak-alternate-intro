@@ -976,6 +976,23 @@ return function(mod)
 
   Player.tryMove = function(dir, game, run)
     if liveGame
+        and dir == "down"
+        and not momEventRunning
+        and not encounterRunning
+        and mod.save:get("firered_starter")
+        and not mod.save:get("firered_mom_gift_done") then
+      local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
+      if (mapId == "PalletTown_PlayersHouse_1F"
+          or mapId == "FR_PLAYERS_HOUSE_1F"
+          or mapId:find("PLAYERS_HOUSE_1F", 1, true))
+          and (Player.cellX == 4 or Player.cellX == 5)
+          and Player.cellY == 7 then
+        runMomEvent()
+        return "blocked", "alternate_mom"
+      end
+    end
+
+    if liveGame
         and dir == "up"
         and not momEventRunning
         and not encounterRunning
@@ -1029,19 +1046,6 @@ return function(mod)
         local flag = Flags.IDS[flagName]
         if flag then Flags.setFlag(Space.store, nil, flag, taken[speciesId] == true) end
       end
-    end
-
-    if liveGame
-        and not momEventRunning
-        and (mapId == "PalletTown_PlayersHouse_1F"
-          or mapId == "FR_PLAYERS_HOUSE_1F"
-          or mapId:find("PLAYERS_HOUSE_1F", 1, true))
-        and mod.save:get("firered_starter")
-        and not mod.save:get("firered_mom_gift_done")
-        and not Player.moving
-        and Player.cellX == 10
-        and Player.cellY == 2 then
-      runMomEvent()
     end
 
     return result
