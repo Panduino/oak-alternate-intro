@@ -48,17 +48,16 @@ return function(mod)
 
   local function utf8Chars(s)
     local out = {}
-    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
       out[#out + 1] = ch
     end
     return out
   end
 
-  -- Exact FireRed printer state used by src/ui/game3/new_game_scene.lua.
   local function newOakPrinter(text, speed, canSpeedUp)
     local p = {
       pages = {}, page = 1, revealed = 0, tokens = {}, pos = 1,
-      active = true, state = "char", delay = 0, spedUp = false,
+      active = true, state = "char", delay = 0,
       canSpeedUp = canSpeedUp, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
     }
 
@@ -79,76 +78,46 @@ return function(mod)
     p.pages[#p.pages + 1] = pageText
     p.tokens[#p.tokens + 1] = "E"
 
-    if speed == 0 then
-      p.textSpeed = 0
-      while p.active do
-        local tok = p.tokens[p.pos]
-        p.pos = p.pos + 1
-        if tok == "C" or tok == "N" then
-          p.revealed = p.revealed + 1
-        elseif tok == "E" or tok == nil then
-          p.active = false
-        end
-      end
-    else
-      p.textSpeed = speed - 1
-    end
+    p.textSpeed = math.max(0, (tonumber(speed) or 1) - 1)
 
-    function p:render(newAB, heldAB)
-      if self.state == "char" then
-        if heldAB and self.spedUp then self.delay = 0 end
-        if self.delay > 0 and self.textSpeed > 0 then
-          self.delay = self.delay - 1
-          if self.canSpeedUp and newAB then
-            self.spedUp = true
-            self.delay = 0
-          end
-          return "update"
-        end
-
-        self.delay = self.textSpeed
-        local tok = self.tokens[self.pos]
-        self.pos = self.pos + 1
-        if tok == "N" then
-          self.revealed = self.revealed + 1
-          return "repeat"
-        end
-        if tok == "P" then
-          self.state = "clear"
-          self.arrowIdx, self.arrowDelay = 0, 0
-          return "update"
-        end
-        if tok == "E" or tok == nil then
-          self.active = false
-          return "finish"
-        end
-        self.revealed = self.revealed + 1
-        return "print"
-      end
-
-      if self.arrowDelay ~= 0 then
-        self.arrowDelay = self.arrowDelay - 1
-      else
-        self.arrowFrame = ARROW_FRAMES[self.arrowIdx + 1]
-        self.arrowDelay = CURSOR_DELAY
-        self.arrowIdx = (self.arrowIdx + 1) % 4
-      end
-
-      if newAB then
-        Audio.playSe(SE.SE_SELECT)
-        self.page = self.page + 1
-        self.revealed = 0
-        self.arrowFrame = nil
-        self.state = "char"
-      end
-      return "update"
-    end
-
-    function p:run(newAB, heldAB)
+    function p:run(newAB)
       if not self.active then return end
-      for _ = 1, 64 do
-        if self:render(newAB, heldAB) ~= "repeat" then return end
+
+      -- A completes the current page. Text never advances by itself.
+      if self.state == "clear" then
+        if newAB then
+          Audio.playSe(SE.SE_SELECT)
+          self.page = self.page + 1
+          self.revealed = 0
+          self.arrowFrame = nil
+          self.arrowDelay = 0
+          self.state = "char"
+        end
+        return
       end
+
+      -- Reveal characters according to the normal text speed, but never
+      -- consume the page-ending form-feed until A is pressed.
+      if self.delay > 0 then
+        self.delay = self.delay - 1
+        return
+      end
+
+      local tok = self.tokens[self.pos]
+      if tok == "P" then
+        self.pos = self.pos + 1
+        self.state = "clear"
+        self.arrowIdx, self.arrowDelay = 0, 0
+        self.arrowFrame = ARROW_FRAMES[1]
+        return
+      elseif tok == "E" or tok == nil then
+        self.active = false
+        return
+      end
+
+      self.pos = self.pos + 1
+      self.revealed = self.revealed + 1
+      self.delay = self.textSpeed
     end
 
     function p:draw(x, y, opts)
@@ -159,8 +128,15 @@ return function(mod)
         colors = opts.colors or FrlgFont.COLOR.NORMAL,
         linePitch = opts.linePitch,
       })
-      if self.state == "clear" and self.arrowFrame and endX then
-        Chrome.promptArrow(endX, endY, self.arrowFrame)
+      if self.state == "clear" then
+        if self.arrowDelay > 0 then
+          self.arrowDelay = self.arrowDelay - 1
+        else
+          self.arrowFrame = ARROW_FRAMES[self.arrowIdx + 1]
+          self.arrowIdx = (self.arrowIdx + 1) % #ARROW_FRAMES
+          self.arrowDelay = CURSOR_DELAY
+        end
+        if endX then Chrome.promptArrow(endX, endY, self.arrowFrame) end
       end
     end
 
@@ -169,10 +145,10 @@ return function(mod)
 
   local function rawPrint(scene, text)
     text = tostring(text or "")
-    text = text:gsub("\\f", "\f")
-    text = text:gsub("\\n", "\n")
-    text = text:gsub("\\p", "\f")
-    text = text:gsub("\\l", "\n")
+    text = text:gsub("\\\\f", "\f")
+    text = text:gsub("\\\\n", "\n")
+    text = text:gsub("\\\\p", "\f")
+    text = text:gsub("\\\\l", "\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
     scene.win.dialog = true
     scene.printer = newOakPrinter(text, scene.textSpeed, true)
@@ -766,15 +742,9 @@ return function(mod)
 
     Field.lock("alternate_oak_mom")
 
-    local function afterFanfare(fn)
-      Audio.waitFanfare(function()
-        fn()
-      end)
-    end
-
     local function finish()
-      -- Mom's original position is (8,4); she approached from there via
-      -- right 2, up 1, so reverse that path before releasing the field.
+      -- Do not start the return walk until the final item message/fanfare
+      -- has completely finished.
       handle:scriptMove("left", 2, function()
         handle:scriptMove("down", 1, function()
           handle:face("up")
@@ -785,17 +755,20 @@ return function(mod)
     end
 
     local function giveShoes()
-      local dashFlag = Flags.IDS.FLAG_SYS_B_DASH or Flags.IDS.SYS_B_DASH or 0x82F
-      Flags.setFlag(Space.store, nil, dashFlag, true)
       session.flags = session.flags or {}
       session.flags[0x82F] = true
-
+      if Space and Space.store then
+        local dashFlag = Flags.IDS.FLAG_SYS_B_DASH or Flags.IDS.SYS_B_DASH
+        if dashFlag then
+          Flags.setFlag(Space.store, nil, dashFlag, true)
+        end
+      end
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
       Message.showStay((session.playerName or session.name or "RED") ..
         " got RUNNING SHOES!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = finish,
         })
-      afterFanfare(finish)
     end
 
     local function giveMap()
@@ -804,8 +777,8 @@ return function(mod)
       Message.showStay((session.playerName or session.name or "RED") ..
         " got a TOWN MAP!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = giveShoes,
         })
-      afterFanfare(giveShoes)
     end
 
     local function giveBalls()
@@ -814,8 +787,8 @@ return function(mod)
       Message.showStay((session.playerName or session.name or "RED") ..
         " got 10 POKé BALLs!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = giveMap,
         })
-      afterFanfare(giveMap)
     end
 
     local function talk()
