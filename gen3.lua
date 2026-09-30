@@ -925,6 +925,8 @@ return function(mod)
     local handle = Objects.find(8)
     if not handle then return nil end
 
+    -- The player is stopped on the north edge of Pallet Town. Put Rival
+    -- on the first walkable tile below the player, never on the player's tile.
     local startY
     for y = playerY + 1, math.min(playerY + 8, 19) do
       if Collision.inBounds(x, y)
@@ -943,23 +945,46 @@ return function(mod)
   end
 
   local function rivalLeave(handle, playerX)
+    local function hideAtRouteEntrance()
+      hideRival(handle)
+    end
+
     local function step()
       if not handle or handle.hidden then return end
 
       local x = tonumber(handle.cellX) or playerX
       local y = tonumber(handle.cellY) or 0
 
-      if Collision.inBounds(x, y - 1) and Collision.isWalkable(x, y - 1)
+      -- Walk around the player rather than trying to occupy their tile.
+      if y > 0 and Collision.inBounds(x, y - 1)
+          and Collision.isWalkable(x, y - 1)
           and not Objects.at(x, y - 1) then
         handle:scriptMove("up", 1, step)
-      elseif Collision.inBounds(x - 1, y) and Collision.isWalkable(x - 1, y)
-          and not Objects.at(x - 1, y) then
-        handle:scriptMove("left", 1, step)
-      elseif Collision.inBounds(x + 1, y) and Collision.isWalkable(x + 1, y)
-          and not Objects.at(x + 1, y) then
-        handle:scriptMove("right", 1, step)
+        return
+      end
+
+      for _, dir in ipairs({ "left", "right" }) do
+        local dx = dir == "left" and -1 or 1
+        if Collision.inBounds(x + dx, y)
+            and Collision.isWalkable(x + dx, y)
+            and not Objects.at(x + dx, y) then
+          handle:scriptMove(dir, 1, function()
+            local nx = tonumber(handle.cellX) or x
+            local ny = tonumber(handle.cellY) or y
+            if ny == 0 then
+              hideAtRouteEntrance()
+            else
+              rivalLeave(handle, nx)
+            end
+          end)
+          return
+        end
+      end
+
+      if y == 0 then
+        hideAtRouteEntrance()
       else
-        hideRival(handle)
+        hideAtRouteEntrance()
       end
     end
 
@@ -1037,7 +1062,7 @@ return function(mod)
       end
     end
 
-    moveSteps(handle, "up", math.max(0, startY - y), function()
+    moveSteps(handle, "up", math.max(0, startY - y - 1), function()
       handle:face("up")
       Message.show(
         "Hey, " .. name .. "!\\n" ..
@@ -1147,9 +1172,20 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        if x and y and Collision.inBounds(x, y - 1) == false then
-          if startRivalBattle(x, y) then
-            return "blocked", "alternate_rival"
+        if x and y then
+          -- Player.tryMove normally hands an out-of-bounds north step to
+          -- Collision.tryConnection, which is what moves Pallet Town -> Route 1.
+          -- Intercept that exact case before the connection can happen.
+          local canEnter, why = Collision.canEnter(liveGame, x, y - 1, {
+            fromX = x,
+            fromY = y,
+            dir = dir,
+            elevation = Player.currentElevation,
+          })
+          if not canEnter and why == "bounds" then
+            if startRivalBattle(x, y) then
+              return "blocked", "alternate_rival"
+            end
           end
         end
       end
