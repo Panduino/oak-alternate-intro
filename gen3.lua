@@ -125,12 +125,15 @@ return function(mod)
       "Before you leave, you should have\\na POKéMON of your own!\\f" ..
       "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?"
     )
-    showStarterMenu(self)
     t.func = Scene.Task_AlternateOakStarterInput
   end
 
   function Scene.Task_AlternateOakStarterInput(self, t)
     if starterMessageActive() then return end
+    if not self._alternateStarterMenu then
+      showStarterMenu(self)
+      return
+    end
     local r = self:menuInput(false)
     local cursor = self.win.menu and self.win.menu.cursor or 0
     if self.win.menu then
