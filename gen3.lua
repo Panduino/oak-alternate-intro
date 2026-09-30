@@ -42,7 +42,7 @@ return function(mod)
   local liveGame
   local activeRival
   local encounterRunning = false
-  local RIVAL_OBJECT_ID = 1
+  local RIVAL_OBJECT_ID = 3
 
   -- Reuse the engine's working FireRed Oak printer instead of maintaining
   -- a second text implementation.  We temporarily replace RomText.ascii so
@@ -875,47 +875,45 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
-      -- FireRed's post-intro Oak is local object 8 (OAKSLAB_OAK1).
-      -- Re-add it after correcting the hide flag so a stale object state
-      -- from the intro scene cannot leave the lab empty.
+      -- FireRed's post-Pokédex lab state is scene 6. Oak is local
+      -- object 4; the two Pokédex props are local objects 9 and 10.
+      -- Explicitly restore that native state because the alternate intro
+      -- never runs FireRed's normal scene-6 cleanup script.
       local Objects = require("src.core.game3.objects")
-  
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      Objects.showObject(4)
+      Objects.removeObject(9)
+      Objects.removeObject(10)
+      if Objects.refreshVisibility then Objects.refreshVisibility() end
+      if Objects.refreshGraphics then Objects.refreshGraphics() end
+
       setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
 
-  -- The stepped event was the last known working trigger.  Once it fires,
-  -- startRivalBattle locks the field, so the player cannot keep sprinting
-  -- through the encounter while Rival is walking in.
-  -- Intercept the actual northbound player step before the engine can
-  -- perform the Route 1 connection. This is the same point where vanilla
-  -- Oak's Pallet Town trigger prevents the player from leaving town.
-  mod.hooks:wrap("movement.collision", function(next, allowed, ctx)
-    if encounterRunning or mod.save:get("firered_pallet_rival_done") then
-      return next(allowed, ctx)
+  -- FireRed's actual Pallet Town trigger is an on-frame coordinate
+  -- trigger at (12,1) and (13,1), before the north connection to Route 1.
+  -- Poll that exact in-town trigger tile before the engine processes the
+  -- next movement frame. This avoids relying on movement.collision, which
+  -- is not the vanilla coordinate-trigger seam for an edge connection.
+  mod.hooks:wrap("core.update", function(next, game, dt)
+    if liveGame and not encounterRunning
+        and mod.save:get("firered_starter")
+        and mod.save:get("firered_mom_gift_done")
+        and not mod.save:get("firered_pallet_rival_done") then
+      local ow = liveGame.overworld
+      local map = ow and ow.map
+      local Player = require("src.core.game3.player")
+      local mapId = map and tostring(map.id or "") or ""
+      local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
+      if mapId == "PALLET_TOWN"
+          and (x == 12 or x == 13)
+          and y == 1
+          and Player.facing == "up" then
+        startRivalBattle("PALLET_TOWN", x, y)
+      end
     end
-    if not liveGame or not ctx or not ctx.map then
-      return next(allowed, ctx)
-    end
-    local collisionMapId = tostring(ctx.map.id or "")
-    if collisionMapId:gsub("^FR_", "") ~= "PALLET_TOWN" then
-      return next(allowed, ctx)
-    end
-    if not mod.save:get("firered_starter") or not mod.save:get("firered_mom_gift_done") then
-      return next(allowed, ctx)
-    end
-    if ctx.mover ~= liveGame.overworld.player then
-      return next(allowed, ctx)
-    end
-
-    local fromX, fromY = tonumber(ctx.fromX), tonumber(ctx.fromY)
-    if ctx.dir ~= "up" or (fromX ~= 12 and fromX ~= 13) or fromY > 2 then
-      return next(allowed, ctx)
-    end
-
-    startRivalBattle("PALLET_TOWN", fromX, fromY)
-    return false
+    return next(game, dt)
   end)
 end
