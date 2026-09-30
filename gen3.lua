@@ -228,6 +228,8 @@ return function(mod)
     end
   end
 
+  local originalOakSpeechLetsGo = Scene.Task_OakSpeech_LetsGo
+
   function Scene.Task_AlternateOakStarterAfterNaming(self, t)
     if t.data.timer and t.data.timer > 0 then
       t.data.timer = t.data.timer - 1
@@ -240,27 +242,18 @@ return function(mod)
     end
 
     self:clearDialog()
-    self:createFadeInTask(t, 2)
+    self._alternateStarterInserted = true
     t.data.timer = 0
-    t.func = Scene.Task_OakSpeech_FadeInRivalPic
+    t.func = originalOakSpeechLetsGo
   end
 
-  Scene.Task_OakSpeech_FadeOutPlayerPic = function(self, t)
-    local d = t.data
-    if d.picFadeState == 0 then return end
-    self:clearTrainerPic()
-    if d.timer ~= 0 then
-      d.timer = d.timer - 1
+  Scene.Task_OakSpeech_LetsGo = function(self, t)
+    if not self._alternateStarterInserted then
+      self._alternateStarterInserted = true
+      t.func = Scene.Task_AlternateOakStarterIntro
       return
     end
-
-    self:loadTrainerPic("oak")
-    d.picPosX = 0
-    self.coordOffsetX = 0
-    self.bg2X = 0
-    self:createFadeOutTask(t, 2)
-    t.data.timer = 0
-    t.func = Scene.Task_AlternateOakStarterIntro
+    return originalOakSpeechLetsGo(self, t)
   end
 
   local function setVar(name, value)
