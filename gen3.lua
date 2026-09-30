@@ -923,7 +923,7 @@ return function(mod)
       end
     end
     return nativePlayerTryMove(dir, game, run)
-  end)
+  end
 
   mod.hooks:wrap("core.update", function(next, game, dt)
     local ow = liveGame and liveGame.overworld
