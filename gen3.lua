@@ -87,11 +87,15 @@ return function(mod)
       if self.state == "clear" then
         if newAB then
           Audio.playSe(SE.SE_SELECT)
-          self.page = self.page + 1
-          self.revealed = 0
-          self.arrowFrame = nil
-          self.arrowDelay = 0
-          self.state = "char"
+          if self.page < #self.pages then
+            self.page = self.page + 1
+            self.revealed = 0
+            self.arrowFrame = nil
+            self.arrowDelay = 0
+            self.state = "char"
+          else
+            self.active = false
+          end
         end
         return
       end
@@ -111,7 +115,11 @@ return function(mod)
         self.arrowFrame = ARROW_FRAMES[1]
         return
       elseif tok == "E" or tok == nil then
-        self.active = false
+        -- The final page is still a real dialogue page: wait for A instead
+        -- of immediately handing control back to the scene task.
+        self.state = "clear"
+        self.arrowIdx, self.arrowDelay = 0, 0
+        self.arrowFrame = ARROW_FRAMES[1]
         return
       end
 
@@ -558,53 +566,124 @@ return function(mod)
     end
   end
 
-  local function spawnRival(mapId, x)
+  local function spawnRival(mapId)
     local Objects = require("src.core.game3.objects")
-    local GfxIds = require("src.core.game3.scripting.gfx_ids")
-    local localId = 3 -- LOCALID_PALLET_PROF_OAK
+    local FieldView = package.loaded["src.core.game3.field_view"]
 
-    Objects.showObject(localId)
-    local eo = Objects.find(localId)
+    -- Pallet Town has no native Rival event object. Build one from the
+    -- engine's normal EventObject constructor instead of borrowing Oak.
+    local mapDef = liveGame.data and liveGame.data.maps and liveGame.data.maps[mapId]
+    if not mapDef then return nil end
+
+    local def = {
+      localId = RIVAL_OBJECT_ID,
+      mapId = mapId,
+      x = 9,
+      y = 19,
+      elevation = 3,
+      movementType = 7,
+      facing = "up",
+      graphicsId = 72,
+      sprite = "SPRITE_BLUE",
+      visible = true,
+      hidden = false,
+      passable = false,
+    }
+
+    local pool = Objects.spawnFromDefs({ def }, mapDef, mapId)
+    local eo = pool and pool.byId and pool.byId[RIVAL_OBJECT_ID]
     if not eo then return nil end
 
-    -- FireRed OBJ_EVENT_GFX_RIVAL is graphics ID 72 (Blue).
-    eo.graphicsId = 72
-    eo.sprite = GfxIds.spriteFor(72) or "SPRITE_BLUE"
-    eo.hidden = false
-    eo.visible = true
-    eo.invisible = false
-    if eo.def then
-      eo.def.graphicsId = 72
-      eo.def.sprite = eo.sprite
-      eo.def.hidden = false
-    end
+    Objects._byId[RIVAL_OBJECT_ID] = eo
+    Objects._order[#Objects._order + 1] = RIVAL_OBJECT_ID
+    Objects._tracks[RIVAL_OBJECT_ID] = nil
+    if FieldView then FieldView._nativeDirty = true end
 
-    local handle = mod.world:npc(mapId, localId)
+    local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
-      Objects.removeObject(localId)
+      Objects.removeObject(RIVAL_OBJECT_ID)
       return nil
     end
 
-    handle:placeAt(15, 8, "up")
-    activeRival = localId
+    handle:placeAt(9, 19, "up")
+    activeRival = RIVAL_OBJECT_ID
     return handle
   end
 
-  local function move(handle, dir, count, done)
-    if count <= 0 then
-      done()
+  local function pathBetween(handle, targetX, targetY, done)
+    local Collision = require("src.core.game3.collision")
+    local dirs = {
+      { name = "up", dx = 0, dy = -1 },
+      { name = "down", dx = 0, dy = 1 },
+      { name = "left", dx = -1, dy = 0 },
+      { name = "right", dx = 1, dy = 0 },
+    }
+
+    local sx, sy = handle:position()
+    local queue = { { x = sx, y = sy, path = {} } }
+    local head = 1
+    local seen = { [sx .. "," .. sy] = true }
+    local found
+
+    while head <= #queue do
+      local node = queue[head]
+      head = head + 1
+      if node.x == targetX and node.y == targetY then
+        found = node.path
+        break
+      end
+      for _, d in ipairs(dirs) do
+        local nx, ny = node.x + d.dx, node.y + d.dy
+        local key = nx .. "," .. ny
+        if not seen[key] and Collision.canEnter(nil, nx, ny, {
+            fromX = node.x, fromY = node.y, dir = d.name, surfing = false,
+            elevation = 3,
+          }) then
+          seen[key] = true
+          local nextPath = {}
+          for i, step in ipairs(node.path) do nextPath[i] = step end
+          nextPath[#nextPath + 1] = d.name
+          queue[#queue + 1] = { x = nx, y = ny, path = nextPath }
+        end
+      end
+    end
+
+    if not found then
+      done(false)
       return
     end
-    handle:scriptMove(dir, 1, function()
-      move(handle, dir, count - 1, done)
-    end)
+
+    local function walk(i)
+      if i > #found then
+        done(true)
+        return
+      end
+      handle:scriptMove(found[i], 1, function()
+        walk(i + 1)
+      end)
+    end
+    walk(1)
   end
 
   local function departRival(handle, playerX)
-    move(handle, "up", 2, function()
-      removeRival()
-      encounterRunning = false
-      require("src.core.game3.field").unlock("alternate_oak_rival")
+    -- Go around the player, using the other north-exit lane, then continue
+    -- to the edge. The final step deliberately leaves the map bounds so the
+    -- player can actually see Rival walk off-screen.
+    local escapeX = playerX == 12 and 13 or 12
+
+    pathBetween(handle, escapeX, 0, function(ok)
+      if not ok then
+        removeRival()
+        encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
+        return
+      end
+
+      handle:scriptMove("up", 1, function()
+        removeRival()
+        encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
+      end)
     end)
   end
 
@@ -617,14 +696,21 @@ return function(mod)
     local trainerId = RIVAL_TRAINERS[species]
     if not trainerId then return false end
 
-    local handle = spawnRival(mapId, x)
+    local handle = spawnRival(mapId)
     if not handle then return false end
 
     local Field = require("src.core.game3.field")
+    local Player = require("src.core.game3.player")
     Field.lock("alternate_oak_rival")
     encounterRunning = true
-    -- Keep the vanilla Pallet Town Oak scene in its completed state while
-    -- this replacement encounter runs.
+
+    -- Face the approaching Rival before his first step.
+    Player.facing = "down"
+    if liveGame.save then liveGame.save.facing = "down" end
+
+    -- The Rival's battle theme starts when he begins walking toward the player.
+    Audio.playSong("MUS_VS_TRAINER")
+
     setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
 
     if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
@@ -681,16 +767,23 @@ return function(mod)
       end
     end
 
-    move(handle, "up", 6, function()
-      move(handle, "left", 15 - x, function()
-        handle:face("up")
+    -- Start from the south road, not from the Rival's house. The pathfinder
+    -- keeps every step on an actually walkable cell.
+    pathBetween(handle, x, 2, function(ok)
+      if not ok then
+        removeRival()
+        encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
+        return
+      end
+
+      handle:face("up")
       rivalDialog(
         playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
         "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
         "Come on, I'll take you on!",
         beginBattle
       )
-      end)
     end)
 
     return true
@@ -814,6 +907,12 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
+    if tostring(ev.mapId) == "FR_PALLET_TOWN"
+        and mod.save:get("firered_starter") then
+      -- Remove the vanilla Trainer Tips sign girl from the alternate route.
+      local Objects = require("src.core.game3.objects")
+      Objects.removeObject(1)
+    end
     if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
         and mod.save:get("firered_starter")
         and not mod.save:get("firered_mom_gift_done") then
