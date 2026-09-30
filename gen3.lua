@@ -764,7 +764,7 @@ return function(mod)
         end
       end
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Message.showStay((session.playerName or session.name or "RED") ..
+      Message.show((session.playerName or session.name or "RED") ..
         " got RUNNING SHOES!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
           done = finish,
@@ -774,7 +774,7 @@ return function(mod)
     local function giveMap()
       Bag.add(session.bag, 361, 1)
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Message.showStay((session.playerName or session.name or "RED") ..
+      Message.show((session.playerName or session.name or "RED") ..
         " got a TOWN MAP!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
           done = giveShoes,
@@ -784,7 +784,7 @@ return function(mod)
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
       Audio.playFanfare("MUS_OBTAIN_ITEM")
-      Message.showStay((session.playerName or session.name or "RED") ..
+      Message.show((session.playerName or session.name or "RED") ..
         " got 10 POKé BALLs!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
           done = giveMap,
