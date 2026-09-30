@@ -57,18 +57,57 @@ return function(mod)
     local printer = {
       pages = pages,
       page = 1,
+      revealed = 0,
+      pos = 1,
       active = true,
+      waiting = false,
+      delay = 0,
     }
 
-    function printer:run(newAB)
+    local function charCount(s)
+      return FrlgFont.countChars(s or "")
+    end
+
+    printer.total = charCount(printer.pages[1])
+
+    function printer:run(newAB, heldAB)
       if not self.active then return end
-      if newAB then
-        Audio.playSe(SE.SE_SELECT)
-        if self.page < #self.pages then
-          self.page = self.page + 1
-        else
-          self.active = false
+
+      if self.waiting then
+        if newAB then
+          Audio.playSe(SE.SE_SELECT)
+          if self.page < #self.pages then
+            self.page = self.page + 1
+            self.revealed = 0
+            self.pos = 1
+            self.waiting = false
+            self.delay = 0
+            self.total = charCount(self.pages[self.page])
+          else
+            self.active = false
+          end
         end
+        return
+      end
+
+      local speed = tonumber(scene.textSpeed) or 4
+      if speed < 1 then speed = 1 end
+      if heldAB then speed = 0 end
+
+      if self.delay > 0 then
+        self.delay = self.delay - 1
+        return
+      end
+
+      if self.revealed >= self.total then
+        self.waiting = true
+        return
+      end
+
+      self.revealed = self.revealed + 1
+      self.delay = speed - 1
+      if newAB then
+        self.delay = 0
       end
     end
 
@@ -77,13 +116,13 @@ return function(mod)
         maxWidth = opts.maxWidth,
         colors = opts.colors or FrlgFont.COLOR.NORMAL,
         linePitch = FrlgFont.LINE_PITCH,
+        limitChars = self.revealed,
       })
     end
 
     scene.win.dialog = true
     scene.printer = printer
   end
-
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
   end
@@ -141,9 +180,21 @@ return function(mod)
   function Scene.Task_AlternateOakStarterIntro(self, t)
     if self:fadeActive() then return end
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
-    rawPrint(self,
-      "Before you leave,\\nyou should have a\\nPOKéMON of your own!\\f" ..
-      "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?")
+
+    if t.data.page == nil then
+      t.data.page = 1
+      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your own!")
+      return
+    end
+
+    if self:printerActive() then return end
+    if t.data.page == 1 then
+      t.data.page = 2
+      rawPrint(self, "I have three wonderful\\nPOKéMON here for you.")
+      return
+    end
+
+    if self:printerActive() then return end
     t.func = Scene.Task_AlternateOakStarterInput
   end
 
@@ -303,12 +354,19 @@ return function(mod)
     local row = starterRow(self)
     if row then
       mod.save:set("firered_starter_nickname", self._alternateStarterNickname or row.name)
+      giveStarterToLiveGame()
     end
 
     self:clearDialog()
     self:createFadeInTask(t, 2)
     t.data.timer = 0
     t.func = Scene.Task_OakSpeech_FadeInRivalPic
+  end
+
+  local originalFadeInRivalPic = Scene.Task_OakSpeech_FadeInRivalPic
+  Scene.Task_OakSpeech_FadeInRivalPic = function(self, t)
+    self:loadTrainerPic("rival")
+    return originalFadeInRivalPic(self, t)
   end
 
   Scene.Task_OakSpeech_FadeOutPlayerPic = function(self, t)
@@ -389,11 +447,13 @@ return function(mod)
     if not row then return end
 
     session.vars[0x4031] = row.index
+    session.vars[0x4050] = 1
     session.vars[0x4055] = 6
 
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
+    session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
@@ -407,6 +467,19 @@ return function(mod)
     session.dex.caught[row.species] = true
   end
 
+  local function giveStarterToLiveGame()
+    if not liveGame or mod.save:get("firered_starter_given") then return end
+    local species = tonumber(mod.save:get("firered_starter"))
+    local row = STARTER_BY_SPECIES[species]
+    if not row then return end
+
+    local nickname = mod.save:get("firered_starter_nickname") or row.name
+    if Party.giveMon(liveGame.save, row.species, 5, nickname) then
+      setupProgress(liveGame.save)
+      mod.save:set("firered_starter_given", true)
+    end
+  end
+
   mod.hooks:wrap("save.new_game", function(next, session)
     session = next(session) or session
 
@@ -414,12 +487,18 @@ return function(mod)
     local row = STARTER_BY_SPECIES[species]
     if not row then return session end
 
+    if mod.save:get("firered_starter_given") then
+      setupProgress(session)
+      return session
+    end
+
     local nickname = mod.save:get("firered_starter_nickname")
     if not Party.giveMon(session, row.species, 5, nickname or row.name) then
       return session
     end
 
     setupProgress(session)
+    mod.save:set("firered_starter_given", true)
     return session
   end)
 
@@ -580,14 +659,15 @@ return function(mod)
     session.bag = session.bag or Bag.new()
 
     local function returnMom()
-      handle:face("down")
       handle:scriptMove("up", 1, function()
+        handle:face("down")
         mod.save:set("firered_mom_gift_done", true)
       end)
     end
 
     local function giveMap()
       Bag.add(session.bag, 361, 1)
+      Audio.playFanfare("MUS_LEVEL_UP")
       Message.show((session.player and session.player.name or "RED") ..
         " got a TOWN MAP!", {
         npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
@@ -597,6 +677,7 @@ return function(mod)
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
+      Audio.playFanfare("MUS_LEVEL_UP")
       Message.show((session.player and session.player.name or "RED") ..
         " got 10 POKé BALLs!", {
         npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
@@ -617,8 +698,25 @@ return function(mod)
       })
     end
 
-    -- Mom starts one tile above the player in the FireRed house.
-    handle:scriptMove("down", 1, talk)
+    local px = tonumber(session.x) or 8
+    local py = tonumber(session.y) or 5
+    local mx = handle.x or handle.cellX or px
+    local my = handle.y or handle.cellY or (py - 1)
+
+    if math.abs(mx - px) + math.abs(my - py) == 1 then
+      talk()
+      return
+    end
+
+    local dx = px - mx
+    local dy = py - my
+    if math.abs(dy) >= math.abs(dx) and dy ~= 0 then
+      handle:scriptMove(dy > 0 and "down" or "up", math.abs(dy), talk)
+    elseif dx ~= 0 then
+      handle:scriptMove(dx > 0 and "right" or "left", math.abs(dx), talk)
+    else
+      talk()
+    end
   end
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
@@ -647,6 +745,7 @@ return function(mod)
     end
     if ev.y ~= 1 or (ev.x ~= 12 and ev.x ~= 13) then return end
     if not mod.save:get("firered_starter") then return end
+    if not mod.save:get("firered_mom_gift_done") then return end
 
     startRivalBattle(ev.mapId, ev.x, ev.y)
   end)
