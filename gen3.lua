@@ -777,6 +777,8 @@ return function(mod)
           return
         end
 
+        -- Find the complete route once. Recomputing the route after every
+        -- step was causing Mom to pick a different adjacent tile and loop.
         local queue = { { x = mx, y = my, path = {} } }
         local seen = { [mx .. ":" .. my] = true }
         local dirs = {
@@ -814,8 +816,13 @@ return function(mod)
         end
 
         if foundPath and #foundPath > 0 then
-          local dir = foundPath[1]
-          Objects.startTrack(handle.localId, { { kind = "step", dir = dir } }, moveToPlayer)
+          Objects.startTrack(handle.localId, (function()
+            local steps = {}
+            for _, dir in ipairs(foundPath) do
+              steps[#steps + 1] = { kind = "step", dir = dir }
+            end
+            return steps
+          end)(), facePlayer)
         else
           facePlayer()
         end
@@ -1059,7 +1066,7 @@ return function(mod)
           or mapId:find("PLAYERS_HOUSE_1F", 1, true))
           and (Player.cellX == 4 or Player.cellX == 5
             or Player.cellX == 3 or Player.cellX == 6)
-          and Player.cellY == 7 then
+          and (Player.cellY == 7 or Player.cellY == 8) then
         runMomEvent()
         return "blocked", "alternate_mom"
       end
