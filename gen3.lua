@@ -48,7 +48,7 @@ return function(mod)
 
   local function utf8Chars(s)
     local out = {}
-    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
+    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
       out[#out + 1] = ch
     end
     return out
