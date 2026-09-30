@@ -42,6 +42,7 @@ return function(mod)
   local liveGame
   local activeRival
   local encounterRunning = false
+  local momEventRunning = false
   local RIVAL_OBJECT_ID = 3
 
   -- Reuse the engine's working FireRed Oak printer instead of maintaining
@@ -461,6 +462,7 @@ return function(mod)
     session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
+    session.flags[58] = true -- FLAG_HIDE_POKEDEX
     -- FireRed's special flags are what actually expose these start-menu
     -- entries.  Keep these separate from the normal event flags.
     session.flags[0x828] = true -- Pokémon menu
@@ -500,22 +502,13 @@ return function(mod)
   end
 
   local function removeRival()
-    if activeRival then
-      local Objects = require("src.core.game3.objects")
-      for _, lid in ipairs(Objects._order or {}) do
-        local eo = Objects._byId[lid]
-        local name = eo and eo.def and tostring(eo.def.name or ""):upper() or ""
-        if name:find("OAK", 1, true) then
-          eo.hidden = false
-          eo.visible = true
-          eo.invisible = false
-          if eo.def then eo.def.hidden = false end
-        end
-      end
-      if Objects.refreshGraphics then Objects.refreshGraphics() end
-      Objects.removeObject(activeRival)
-      activeRival = nil
-    end
+    if not activeRival then return end
+    local Objects = require("src.core.game3.objects")
+    Objects.removeObject(activeRival)
+    activeRival = nil
+    setFlag("FLAG_HIDE_OAK_IN_PALLET_TOWN", true)
+    if Objects.refreshVisibility then Objects.refreshVisibility() end
+    if Objects.refreshGraphics then Objects.refreshGraphics() end
   end
 
   local function spawnRival(mapId)
@@ -524,7 +517,11 @@ return function(mod)
     end
 
     local Objects = require("src.core.game3.objects")
-    if not Objects.addObject(RIVAL_OBJECT_ID) then return nil end
+    setFlag("FLAG_HIDE_OAK_IN_PALLET_TOWN", false)
+    if not Objects.addObject(RIVAL_OBJECT_ID) then
+      setFlag("FLAG_HIDE_OAK_IN_PALLET_TOWN", true)
+      return nil
+    end
 
     local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
@@ -768,6 +765,7 @@ return function(mod)
   end
 
   local function runMomEvent()
+    if momEventRunning then return end
     if not liveGame or mod.save:get("firered_mom_gift_done") then return end
     local handle = mod.world:npc("FR_PLAYERS_HOUSE_1F", 1)
     if not handle then return end
@@ -779,6 +777,7 @@ return function(mod)
     session.bag = session.bag or Bag.new()
 
     Field.lock("alternate_oak_mom")
+    momEventRunning = true
 
     local function finish()
       -- Do not start the return walk until the final item message/fanfare
@@ -787,6 +786,7 @@ return function(mod)
         handle:scriptMove("down", 1, function()
           handle:face("up")
           mod.save:set("firered_mom_gift_done", true)
+          momEventRunning = false
           Field.unlock("alternate_oak_mom")
         end)
       end)
@@ -852,11 +852,6 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
-    if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
-        and mod.save:get("firered_starter")
-        and not mod.save:get("firered_mom_gift_done") then
-      runMomEvent()
-    end
     if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
@@ -887,14 +882,26 @@ return function(mod)
   -- next movement frame. This avoids relying on movement.collision, which
   -- is not the vanilla coordinate-trigger seam for an edge connection.
   mod.hooks:wrap("core.update", function(next, game, dt)
+    local ow = liveGame and liveGame.overworld
+    local map = ow and ow.map
+    local mapId = map and tostring(map.id or "") or ""
+
+    if liveGame and not momEventRunning
+        and mapId == "FR_PLAYERS_HOUSE_1F"
+        and mod.save:get("firered_starter")
+        and not mod.save:get("firered_mom_gift_done") then
+      local Player = require("src.core.game3.player")
+      local Warp = require("src.core.game3.warp")
+      if not Player.moving and not Warp.isBusy() then
+        runMomEvent()
+      end
+    end
+
     if liveGame and not encounterRunning
         and mod.save:get("firered_starter")
         and mod.save:get("firered_mom_gift_done")
         and not mod.save:get("firered_pallet_rival_done") then
-      local ow = liveGame.overworld
-      local map = ow and ow.map
       local Player = require("src.core.game3.player")
-      local mapId = map and tostring(map.id or "") or ""
       local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
       if mapId == "PALLET_TOWN"
           and (x == 12 or x == 13)
