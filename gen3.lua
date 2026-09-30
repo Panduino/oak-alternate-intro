@@ -4,8 +4,10 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local RomText = require("src.core.game3.rom_text")
+  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
-  local Song = require("src.core.game3.song_ids")
+  local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
   local Space = require("src.core.game3.scripting.space")
   local Trainers = require("src.core.game3.scripting.trainers")
@@ -42,16 +44,73 @@ return function(mod)
   local encounterRunning = false
   local momEventRunning = false
 
+  -- Reuse the engine's working FireRed Oak printer instead of maintaining
+  -- a second text implementation.  We temporarily replace RomText.ascii so
+  -- Scene:oakPrint builds its normal native printer from our literal text.
+  local nativeOakPrint = Scene.oakPrint
+
+  local function rawPrint(scene, text)
+    text = tostring(text or "")
+    text = text:gsub("\\f", "\f")
+    text = text:gsub("\\n", "\n")
+    text = text:gsub("\\p", "\f")
+    text = text:gsub("\\l", "\n")
+    text = text:gsub("{PLAYER}", scene.playerName or "RED")
+
+    local oldAscii = RomText.ascii
+    RomText.ascii = function()
+      return text
+    end
+
+    local ok, err = pcall(nativeOakPrint, scene, "lets_go")
+    RomText.ascii = oldAscii
+    if not ok then error(err, 0) end
+
+    -- Native FireRed normally closes the final page at EOS.  For this intro
+    -- every page, including the last one, must wait for A before the scene
+    -- advances.  Keep the native renderer/arrow and only intercept EOS.
+    local printer = scene.printer
+    if printer and not printer._alternateFinalWait then
+      local nativeRender = printer.render
+      printer.render = function(p, newAB, heldAB)
+        if p._alternateFinalWait then
+          if newAB then
+            p._alternateFinalWait = false
+            p.active = false
+            return "finish"
+          end
+          nativeRender(p, false, heldAB)
+          return "update"
+        end
+
+        local result = nativeRender(p, newAB, heldAB)
+        if result == "finish" then
+          p._alternateFinalWait = true
+          p.active = true
+          p.state = "clear"
+          p.arrowIdx = 0
+          p.arrowDelay = 0
+          p.arrowFrame = nil
+          return "update"
+        end
+        return result
+      end
+    end
+  end
+
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
   end
 
-  local function starterImage(scene)
+  local function loadStarterImage(scene)
     local row = starterRow(scene)
-    if not row then return nil end
+    if not row then return end
     local ok, entry = pcall(Pokemon.frontPic, row.species, nil, false, 0)
-    if ok and entry then return entry end
-    return nil
+    if ok and entry and entry.image then
+      scene._alternateStarterImage = entry
+    else
+      scene._alternateStarterImage = nil
+    end
   end
 
   local originalDrawBg0Text = Scene.drawBg0Text
@@ -59,9 +118,8 @@ return function(mod)
     originalDrawBg0Text(self)
     if not self._alternateStarterMenu then return end
 
-    local row = starterRow(self)
-    local entry = starterImage(self)
-    if not (row and entry and entry.image) then return end
+    local entry = self._alternateStarterImage
+    if not (entry and entry.image) then return end
 
     local img = entry.image
     local iw = entry.w or img:getWidth()
@@ -69,19 +127,15 @@ return function(mod)
     local scale = math.min(80 / iw, 80 / ih)
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(img, 48, 68, 0, scale, scale, iw / 2, ih / 2)
-    FrlgFont.draw(row.name, 8, 118, {
-      colors = FrlgFont.COLOR.WHITE,
-      maxWidth = 80,
-    })
+    love.graphics.draw(img, 200, 68, 0, scale, scale, iw / 2, ih / 2)
   end
 
   local function showStarterMenu(self)
     self.win.menu = {
       kind = "starter",
-      left = 12,
+      left = 2,
       top = 4,
-      width = 16,
+      width = 18,
       height = 8,
       items = {
         { "BULBASAUR", 8, 1 },
@@ -95,25 +149,51 @@ return function(mod)
       wrap = false,
     }
     self._alternateStarterMenu = true
+    loadStarterImage(self)
   end
 
   function Scene.Task_AlternateOakStarterIntro(self, t)
     if self:fadeActive() then return end
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
-    self:oakPrint(
-      "Before you leave, you should have\\na POKéMON of your own!\\f" ..
-      "I have three wonderful\\nPOKéMON here for you.\\nWhich one would you like?"
-    )
-    showStarterMenu(self)
+
+    if t.data.page == nil then
+      t.data.page = 1
+      rawPrint(self, "Before you leave\\fYou should have a\\nPOKéMON of your own!")
+      return
+    end
+
+    if self:printerActive() then return end
+    if t.data.page == 1 then
+      t.data.page = 2
+      rawPrint(self, "I have three wonderful\\nPOKéMON here for you.")
+      return
+    end
+
+    if self:printerActive() then return end
+    if t.data.page == 2 then
+      t.data.page = 3
+      rawPrint(self, "Which one would you like?")
+      return
+    end
+
+    if self:printerActive() then return end
     t.func = Scene.Task_AlternateOakStarterInput
   end
 
   function Scene.Task_AlternateOakStarterInput(self, t)
     if self:printerActive() then return end
+    if not self.win.menu then
+      showStarterMenu(self)
+      return
+    end
+    local oldCursor = self.win.menu.cursor
     local r = self:menuInput(false)
     local cursor = self.win.menu and self.win.menu.cursor or 0
     if self.win.menu then
       self._alternateStarterSpecies = STARTERS[cursor + 1].species
+      if cursor ~= oldCursor then
+        loadStarterImage(self)
+      end
     end
     if type(r) ~= "number" or r < 0 or r > 2 then return end
 
@@ -122,21 +202,64 @@ return function(mod)
     mod.save:set("firered_starter", row.species)
     self:_answered("starter", row.species, "starter")
 
-    Audio.playSe(Song.SE_SELECT)
+    Audio.playSe(SE.SE_SELECT)
     pcall(Audio.playCry, row.species, 0)
 
     self.win.menu = nil
     self._alternateStarterMenu = false
     self:clearDialog()
-    self:oakPrint(
-      ("A %s will be a great\\npartner for you!\\f" ..
-      "Would you like to\\ngive it a nickname?"):format(row.name)
-    )
+    rawPrint(self,
+      ("A %s will be a great\\npartner for you!"):format(row.name))
     t.func = Scene.Task_AlternateOakStarterNaming
   end
 
   function Scene.Task_AlternateOakStarterNaming(self, t)
+    local row = starterRow(self)
+    if not row then
+      t.func = Scene.Task_OakSpeech_FadeInRivalPic
+      return
+    end
+
+    if not t.data.questionShown then
+      if self:printerActive() then return end
+      rawPrint(self, ("Would you like to give\nyour %s a nickname?"):format(row.name))
+      t.data.questionShown = true
+      return
+    end
+
     if self:printerActive() then return end
+
+    self._alternateStarterNamingTask = t
+    self.win.menu = {
+      kind = "yesno",
+      left = 2,
+      top = 2,
+      width = 6,
+      height = 4,
+      items = {
+        { "Yes", 8, 2 },
+        { "No", 8, 18 },
+      },
+      cursorX = 0,
+      cursorY = 2,
+      pitch = 16,
+      cursor = 0,
+    }
+    t.func = Scene.Task_AlternateOakStarterNicknameChoice
+  end
+
+  function Scene.Task_AlternateOakStarterNicknameChoice(self, t)
+    local r = self:menuInput(false)
+    if r == "none" then return end
+
+    self.win.menu = nil
+    if r == 1 then
+      local row = starterRow(self)
+      self._alternateStarterNickname = row and row.name or "POKéMON"
+      t.data.timer = 0
+      t.func = Scene.Task_AlternateOakStarterAfterNaming
+      return
+    end
 
     local row = starterRow(self)
     if not row then
@@ -221,6 +344,21 @@ return function(mod)
     t.func = Scene.Task_OakSpeech_FadeInRivalPic
   end
 
+  local originalFadeInRivalPic = Scene.Task_OakSpeech_FadeInRivalPic
+  Scene.Task_OakSpeech_FadeInRivalPic = function(self, t)
+    self:loadTrainerPic("rival")
+    return originalFadeInRivalPic(self, t)
+  end
+
+  Scene.Task_OakSpeech_AskRivalsName = function(self, t)
+    if t.data.picFadeState == 0 then return end
+    self:loadTrainerPic("rival")
+    if self.pic then self.pic.hidden = false end
+    self:oakPrint("rival_intro")
+    self.hasPlayerBeenNamed = true
+    t.func = Scene.Task_OakSpeech_MoveRivalDisplayNameOptions
+  end
+
   Scene.Task_OakSpeech_FadeOutPlayerPic = function(self, t)
     local d = t.data
     if d.picFadeState == 0 then return end
@@ -239,6 +377,54 @@ return function(mod)
     t.func = Scene.Task_AlternateOakStarterIntro
   end
 
+  Scene.Task_OakSpeech_FadeOutRivalPic = function(self, t)
+    if self:printerActive() then return end
+    self:clearDialog()
+    self:createFadeInTask(t, 2)
+    t.func = Scene.Task_AlternateOakPokedexSetup
+  end
+
+  function Scene.Task_AlternateOakPokedexSetup(self, t)
+    if self:fadeActive() then return end
+    self:clearTrainerPic()
+    self:loadTrainerPic("oak")
+    if self.pic then self.pic.hidden = false end
+    t.data.picPosX = 0
+    self.coordOffsetX = 0
+    self.bg2X = 0
+    self:createFadeOutTask(t, 2)
+    t.func = Scene.Task_AlternateOakPokedexText
+  end
+
+  function Scene.Task_AlternateOakPokedexText(self, t)
+    if t.data.picFadeState == 0 then return end
+    if self.pic then self.pic.hidden = false end
+
+    if t.data.started ~= true then
+      t.data.started = true
+      rawPrint(self,
+        "I have a request for you.\\f" ..
+        "I want you to help me with\\nmy research.\\f" ..
+        "I've given you an invention\\nof mine, the POKéDEX!\\f" ..
+        "It automatically records\\ndata on POKéMON\\f" ..
+        "you've seen or caught!\\f" ..
+        "It's a hi-tech encyclopedia!\\f" ..
+        "Take this with you, {PLAYER}!\\f" ..
+        "It will help you on your journey.\\f" ..
+        "To make a complete guide on\\nall the POKéMON in the world...\\f" ..
+        "That was my dream! But, I'm too\\nold! I can't do it!\\f" ..
+        "So, I want you to fulfill my\\ndream for me!\\f" ..
+        "Get moving! This is a great\\nundertaking in POKéMON history!")
+      return
+    end
+
+    if self:printerActive() then return end
+
+    self:clearDialog()
+    self:createFadeInTask(t, 2)
+    t.func = Scene.Task_OakSpeech_ReshowPlayersPic
+  end
+
   local function setVar(name, value)
     local id = Flags.VAR_IDS[name]
     if id then
@@ -246,22 +432,40 @@ return function(mod)
     end
   end
 
-  local function setupProgress(session)
+  local function setFlag(name, value)
+    local id = Flags.IDS[name]
+    if id then
+      Flags.setFlag(Space.store, nil, id, value)
+    end
+  end
+
+  local function applyProgress(session)
     session.vars = session.vars or {}
     session.flags = session.flags or {}
 
-        local species = tonumber(mod.save:get("firered_starter"))
+    local species = tonumber(mod.save:get("firered_starter"))
     local row = STARTER_BY_SPECIES[species]
     if not row then return end
 
     session.vars[0x4031] = row.index
-    session.vars[0x4055] = 4
+    session.vars[0x4050] = 3
+    session.vars[0x4051] = 2 -- Viridian tutorial old man already completed
+    session.vars[0x4070] = 2 -- Pallet Trainer Tips girl already completed
+    session.vars[0x4055] = 6
+    session.vars[0x4057] = 2
+    session.vars[0x4058] = 2
 
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
+    session.flags[43] = false
+    session.flags[44] = true
     session.flags[45] = true
-    session.flags[0x829] = true
+    session.flags[58] = true -- FLAG_HIDE_POKEDEX
+    -- FireRed's special flags are what actually expose these start-menu
+    -- entries.  Keep these separate from the normal event flags.
+    session.flags[0x828] = true -- Pokémon menu
+    session.flags[0x829] = true -- Pokédex menu
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -284,7 +488,7 @@ return function(mod)
       return session
     end
 
-    setupProgress(session)
+    applyProgress(session)
     return session
   end)
 
@@ -367,7 +571,42 @@ return function(mod)
     return handle, startY
   end
 
-  local function removeRival()
+  local function pathBetween(handle, targetX, targetY, done)
+    local Collision = require("src.core.game3.collision")
+    local dirs = {
+      { name = "up", dx = 0, dy = -1 },
+      { name = "down", dx = 0, dy = 1 },
+      { name = "left", dx = -1, dy = 0 },
+      { name = "right", dx = 1, dy = 0 },
+    }
+
+    local sx, sy = handle:position()
+    local queue = { { x = sx, y = sy, path = {} } }
+    local head = 1
+    local seen = { [sx .. "," .. sy] = true }
+    local found
+
+    while head <= #queue do
+      local node = queue[head]
+      head = head + 1
+      if node.x == targetX and node.y == targetY then
+        found = node.path
+        break
+      end
+      for _, d in ipairs(dirs) do
+        local nx, ny = node.x + d.dx, node.y + d.dy
+        local key = nx .. "," .. ny
+        if not seen[key] and Collision.canEnter(nil, nx, ny, {
+            fromX = node.x, fromY = node.y, dir = d.name, surfing = false,
+            elevation = 3,
+          }) then
+          seen[key] = true
+          local nextPath = {}
+          for i, step in ipairs(node.path) do nextPath[i] = step end
+          nextPath[#nextPath + 1] = d.name
+          queue[#queue + 1] = { x = nx, y = ny, path = nextPath }
+        end
+      end
     local Objects = require("src.core.game3.objects")
     local handle = Objects.find(8)
     if handle then
@@ -375,16 +614,22 @@ return function(mod)
       handle.visible = true
       handle.scriptBusy = false
     end
-  end
 
-  local function move(handle, dir, count, done)
-    if count <= 0 then
-      done()
+    if not found then
+      done(false)
       return
     end
-    handle:scriptMove(dir, 1, function()
-      move(handle, dir, count - 1, done)
-    end)
+
+    local function walk(i)
+      if i > #found then
+        done(true)
+        return
+      end
+      handle:scriptMove(found[i], 1, function()
+        walk(i + 1)
+      end)
+    end
+    walk(1)
   end
 
   local function departRival(handle, playerX)
@@ -418,6 +663,9 @@ return function(mod)
     local handle, startY = spawnRival(mapId, x, y)
     if not handle then return false end
 
+    local Field = require("src.core.game3.field")
+    local Player = require("src.core.game3.player")
+    Field.lock("alternate_oak_rival")
     encounterRunning = true
     setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
 
@@ -428,12 +676,13 @@ return function(mod)
       Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
     end
 
-    local playerName = liveGame.save.player.name or "RED"
+    local playerName = liveGame.save.playerName or liveGame.save.name or "RED"
     local rivalName = liveGame.save.rivalName or "BLUE"
     local foe = Trainers.foeFromId(trainerId)
     if not foe then
       removeRival()
       encounterRunning = false
+      require("src.core.game3.field").unlock("alternate_oak_rival")
       return false
     end
 
@@ -453,13 +702,13 @@ return function(mod)
         rivalFlags = 1,
         noWhiteout = true,
         rivalName = rivalName,
-        defeatText = "Not bad, " .. playerName .. "!\\nYou're pretty tough.",
+        defeatText = "WHAT? Unbelievable! I picked the wrong POKéMON!",
         done = function()
           mod.save:set("firered_pallet_rival_done", true)
           Party.healAll(liveGame.save.party)
           rivalDialog(
-            "I need to train my POKéMON more.\\n" ..
-            "I'll see you around, " .. playerName .. "!",
+            "OK! I'll make my POKéMON fight to toughen it up!\\n" ..
+            playerName .. "! Smell you later!",
             function()
               departRival(handle, x)
             end
@@ -469,25 +718,136 @@ return function(mod)
       if not ok then
         removeRival()
         encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
+      else
+        mod.save:set("firered_pallet_rival_done", true)
       end
     end
 
     move(handle, "up", math.max(0, startY - y), function()
       handle:face("up")
-      rivalDialog(
-        "Hey, " .. playerName .. "!\\n" ..
-        "Heading out already?\\n\\f" ..
-        "I've got a POKéMON too.\\nLet's have a battle!",
-        beginBattle
-      )
-    end)
 
     return true
   end
 
   mod.events:on("game.ready", function(ev)
     liveGame = ev.game
+    if liveGame and liveGame.save then
+      applyProgress(liveGame.save)
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+      if Flags.IDS.FLAG_HIDE_OAK_IN_PALLET_TOWN then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_PALLET_TOWN, true)
+      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      -- Scene 1 is the original Oak-catches-you sequence.  Scene 3 is the
+      -- post-intro state, so never leave the vanilla grab trigger armed.
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
+      setFlag("FLAG_SYS_POKEMON_GET", true)
+      setFlag("FLAG_SYS_POKEDEX_GET", true)
+    end
   end)
+
+  local function giveMomItems()
+    local Bag = require("src.core.game3.bag")
+    local session = liveGame and liveGame.save
+    if not session then return end
+    session.bag = session.bag or Bag.new()
+    Bag.add(session.bag, 4, 10)
+    Bag.add(session.bag, 361, 1)
+  end
+
+  local function runMomEvent()
+    if momEventRunning then return end
+    if not liveGame or mod.save:get("firered_mom_gift_done") then return end
+    local handle = mod.world:npc("FR_PLAYERS_HOUSE_1F", 1)
+    if not handle then return end
+
+    local Message = require("src.ui.game3.message")
+    local Bag = require("src.core.game3.bag")
+    local Field = require("src.core.game3.field")
+    local session = liveGame.save
+    session.bag = session.bag or Bag.new()
+
+    Field.lock("alternate_oak_mom")
+    momEventRunning = true
+
+    local function finish()
+      -- Do not start the return walk until the final item message/fanfare
+      -- has completely finished.
+      handle:scriptMove("left", 2, function()
+        handle:scriptMove("down", 1, function()
+          handle:face("left")
+          mod.save:set("firered_mom_gift_done", true)
+          momEventRunning = false
+          Field.unlock("alternate_oak_mom")
+        end)
+      end)
+    end
+
+    local function giveShoes()
+      session.flags = session.flags or {}
+      session.flags[0x82F] = true
+      if Space and Space.store then
+        local dashFlag = Flags.IDS.FLAG_SYS_B_DASH or Flags.IDS.SYS_B_DASH
+        if dashFlag then
+          Flags.setFlag(Space.store, nil, dashFlag, true)
+        end
+      end
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
+      Message.show((session.playerName or session.name or "RED") ..
+        " got RUNNING SHOES!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = finish,
+        })
+    end
+
+    local function giveMap()
+      Bag.add(session.bag, 361, 1)
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
+      Message.show((session.playerName or session.name or "RED") ..
+        " got a TOWN MAP!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = giveShoes,
+        })
+    end
+
+    local function giveBalls()
+      Bag.add(session.bag, 4, 10)
+      Audio.playFanfare("MUS_OBTAIN_ITEM")
+      Message.show((session.playerName or session.name or "RED") ..
+        " got 10 POKé BALLs!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = giveMap,
+        })
+    end
+
+    local function talk()
+      handle:face("up")
+      Message.show("Right. All kids leave home\\nsomeday. It said so on TV.", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+        done = function()
+          Message.show("I've packed some fresh\\nunderwear for you, too.\\fYou'll need to be prepared\\nfor your journey!", {
+            npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+            done = giveBalls,
+          })
+        end,
+      })
+    end
+
+    handle:scriptMove("right", 2, function()
+      handle:scriptMove("up", 1, function()
+        handle:face("up")
+        talk()
+      end)
+    end)
+  end
 
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
@@ -495,6 +855,23 @@ return function(mod)
     if entered:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true) end
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false) end
+      -- FireRed's post-Pokédex lab state is scene 6. Let the normal
+      -- contextual object resolver handle the scene's object positions and
+      -- props. Explicitly clear Oak's hide flag and resync that flag so Oak
+      -- is present even if the map was entered with a stale object cache.
+      local Objects = require("src.core.game3.objects")
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+        if Objects.syncFlagVisibility then
+          Objects.syncFlagVisibility(Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false, true)
+        end
+      end
+      if Objects.refreshVisibility then Objects.refreshVisibility() end
+      if Objects.refreshGraphics then Objects.refreshGraphics() end
+
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
 
