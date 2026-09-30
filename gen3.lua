@@ -51,10 +51,10 @@ return function(mod)
 
   local function rawPrint(scene, text)
     text = tostring(text or "")
-    text = text:gsub("\\\\f", "\\f")
-    text = text:gsub("\\\\n", "\\n")
-    text = text:gsub("\\\\p", "\\f")
-    text = text:gsub("\\\\l", "\\n")
+    text = text:gsub("\\f", "\f")
+    text = text:gsub("\\n", "\n")
+    text = text:gsub("\\p", "\f")
+    text = text:gsub("\\l", "\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
 
     local oldAscii = RomText.ascii
