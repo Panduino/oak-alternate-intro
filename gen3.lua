@@ -334,12 +334,7 @@ return function(mod)
   end
 
   local function departRival(handle, playerX)
-    local right = 15 - playerX
-    local down = 7 - 2
-
-    move(handle, "right", right, function()
-      move(handle, "down", down, removeRival)
-    end)
+    move(handle, "up", 2, removeRival)
   end
 
   local function startRivalBattle(mapId, x, y)
