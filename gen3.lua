@@ -510,11 +510,9 @@ return function(mod)
     local Objects = require("src.core.game3.objects")
     local FieldView = package.loaded["src.core.game3.field_view"]
 
-    -- Pallet Town has no native Rival event object. Build one from the
-    -- engine's normal EventObject constructor instead of borrowing Oak.
-    local mapDef = liveGame.data and liveGame.data.maps and liveGame.data.maps[mapId]
-    if not mapDef then return nil end
-
+    -- Use the engine's normal EventObject path.  The previous implementation
+    -- built a detached object pool; WorldAPI:npc() only resolves objects from
+    -- the live Objects registry, so the rival was never actually drawable.
     local def = {
       localId = RIVAL_OBJECT_ID,
       mapId = mapId,
@@ -530,18 +528,24 @@ return function(mod)
       passable = false,
     }
 
-    local pool = Objects.spawnFromDefs({ def }, mapDef, mapId)
-    local eo = pool and pool.byId and pool.byId[RIVAL_OBJECT_ID]
-    if not eo then return nil end
+    Objects._defs = Objects._defs or {}
+    local existing = Objects._byId and Objects._byId[RIVAL_OBJECT_ID]
+    if existing then
+      Objects.removeObject(RIVAL_OBJECT_ID)
+    end
 
-    Objects._byId[RIVAL_OBJECT_ID] = eo
-    Objects._order[#Objects._order + 1] = RIVAL_OBJECT_ID
-    Objects._tracks[RIVAL_OBJECT_ID] = nil
+    Objects._defs[#Objects._defs + 1] = def
+    if not Objects.addObject(RIVAL_OBJECT_ID) then
+      Objects._defs[#Objects._defs] = nil
+      return nil
+    end
+
     if FieldView then FieldView._nativeDirty = true end
 
     local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
       Objects.removeObject(RIVAL_OBJECT_ID)
+      Objects._defs[#Objects._defs] = nil
       return nil
     end
 
