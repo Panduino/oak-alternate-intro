@@ -462,11 +462,13 @@ return function(mod)
     if not row then return end
 
     session.vars[0x4031] = row.index
+    session.vars[0x4050] = 1
     session.vars[0x4055] = 6
 
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
+    session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
