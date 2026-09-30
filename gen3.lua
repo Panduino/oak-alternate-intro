@@ -65,22 +65,26 @@ return function(mod)
       canSpeedUp = canSpeedUp, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
     }
 
-    local pageText = ""
-    for _, ch in ipairs(utf8Chars(text)) do
-      if ch == "\f" then
-        p.pages[#p.pages + 1] = FrlgFont.wrap(pageText, textWidth)
-        pageText = ""
+    local rawPages = {}
+    for page in (text .. "\f"):gmatch("(.-)\f") do
+      rawPages[#rawPages + 1] = FrlgFont.wrap(page, textWidth)
+    end
+
+    for i, pageText in ipairs(rawPages) do
+      p.pages[i] = pageText
+      for _, ch in ipairs(utf8Chars(pageText)) do
+        if ch == "\n" then
+          p.tokens[#p.tokens + 1] = "N"
+        else
+          p.tokens[#p.tokens + 1] = "C"
+        end
+      end
+      if i < #rawPages then
         p.tokens[#p.tokens + 1] = "P"
-      elseif ch == "\n" then
-        pageText = pageText .. ch
-        p.tokens[#p.tokens + 1] = "N"
       else
-        pageText = pageText .. ch
-        p.tokens[#p.tokens + 1] = "C"
+        p.tokens[#p.tokens + 1] = "E"
       end
     end
-    p.pages[#p.pages + 1] = FrlgFont.wrap(pageText, textWidth)
-    p.tokens[#p.tokens + 1] = "E"
 
     if speed == 0 then
       p.textSpeed = 0
