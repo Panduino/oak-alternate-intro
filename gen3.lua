@@ -319,7 +319,7 @@ return function(mod)
       return nil
     end
 
-    handle:placeAt(x, -1, "down")
+    handle:placeAt(15, 8, "up")
     activeRival = id
     return handle
   end
@@ -342,17 +342,11 @@ return function(mod)
   end
 
   local function departRival(handle, playerX)
-    local side = playerX == 12 and "right" or "left"
-    local turn = side == "right" and "right" or "left"
+    local right = 15 - playerX
+    local down = 7 - 1
 
-    move(handle, "down", 1, function()
-      move(handle, side, 1, function()
-        move(handle, "up", 2, function()
-          move(handle, turn, 1, function()
-            move(handle, "up", 2, removeRival)
-          end)
-        end)
-      end)
+    move(handle, "right", right, function()
+      move(handle, "down", down, removeRival)
     end)
   end
 
@@ -422,14 +416,16 @@ return function(mod)
       end
     end
 
-    move(handle, "down", 3, function()
-      handle:face("down")
+    move(handle, "up", 7, function()
+      move(handle, "left", 15 - x, function()
+        handle:face("up")
       rivalDialog(
         "Hey, " .. playerName .. "!\\n" ..
         "Heading out already?\\n\\f" ..
         "I've got a POKéMON too.\\nLet's have a battle!",
         beginBattle
       )
+      end)
     end)
 
     return true
