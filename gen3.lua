@@ -246,7 +246,6 @@ return function(mod)
       end,
     })
   end
-  end
 
   local originalNamingFrame = Scene.namingFrame
   Scene.namingFrame = function(self)
