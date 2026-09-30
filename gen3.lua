@@ -6,6 +6,10 @@ return function(mod)
   local FrlgFont = require("src.ui.game3.frlg_font")
   local Audio = require("src.core.game3.audio")
   local Song = require("src.core.game3.song_ids")
+  local Flags = require("src.core.game3.scripting.flags")
+  local Space = require("src.core.game3.scripting.space")
+  local Trainers = require("src.core.game3.scripting.trainers")
+  local BattleBridge = require("src.core.game3.battle_bridge")
 
   if Scene._alternateOakIntroGen3Installed then return end
   Scene._alternateOakIntroGen3Installed = true
@@ -20,6 +24,22 @@ return function(mod)
   for _, row in ipairs(STARTERS) do
     STARTER_BY_SPECIES[row.species] = row
   end
+
+  local RIVAL_TRAINERS = {
+    [1] = 328,
+    [4] = 326,
+    [7] = 327,
+  }
+
+  local RIVAL_MOVES = {
+    [1] = { 33, 45 },
+    [4] = { 10, 45 },
+    [7] = { 33, 43 },
+  }
+
+  local liveGame
+  local activeRival
+  local encounterRunning = false
 
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -209,8 +229,6 @@ return function(mod)
       return
     end
 
-    -- FireRed normally changes from the player portrait to the rival
-    -- portrait here. Splice the starter sequence at exactly that seam.
     self:loadTrainerPic("oak")
     d.picPosX = 0
     self.coordOffsetX = 0
@@ -220,24 +238,24 @@ return function(mod)
     t.func = Scene.Task_AlternateOakStarterIntro
   end
 
-  mod.hooks:wrap("save.new_game", function(next, session)
-    session = next(session) or session
+  local function setVar(name, value)
+    local id = Flags.VAR_IDS[name]
+    if id then
+      Flags.setVar(Space.store, nil, id, value)
+    end
+  end
 
-    local species = tonumber(mod.save:get("firered_starter"))
-    local row = STARTER_BY_SPECIES[species]
-    if not row then return session end
-
-    local nickname = mod.save:get("firered_starter_nickname")
-    local ok = Party.giveMon(session, row.species, 5, nickname or row.name)
-    if not ok then return session end
-
-    -- FireRed's existing script/state machinery uses these values to
-    -- choose the rival starter and determine the Oak's Lab scene.
+  local function setupProgress(session)
     session.vars = session.vars or {}
+    session.flags = session.flags or {}
+
+        local species = tonumber(mod.save:get("firered_starter"))
+    local row = STARTER_BY_SPECIES[species]
+    if not row then return end
+
     session.vars[0x4031] = row.index
     session.vars[0x4055] = 4
 
-    session.flags = session.flags or {}
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
@@ -251,7 +269,199 @@ return function(mod)
     session.dex.seen[row.species] = true
     session.dex.owned[row.species] = true
     session.dex.caught[row.species] = true
+  end
 
+  mod.hooks:wrap("save.new_game", function(next, session)
+    session = next(session) or session
+
+    local species = tonumber(mod.save:get("firered_starter"))
+    local row = STARTER_BY_SPECIES[species]
+    if not row then return session end
+
+    local nickname = mod.save:get("firered_starter_nickname")
+    if not Party.giveMon(session, row.species, 5, nickname or row.name) then
+      return session
+    end
+
+    setupProgress(session)
     return session
+  end)
+
+  local function rivalDialog(text, done)
+    local Message = require("src.ui.game3.message")
+    Message.show(text, {
+      npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+      done = done,
+    })
+  end
+
+  local function spawnRival(mapId, x)
+    if activeRival then
+      pcall(mod.world.removeNpc, mod.world, activeRival)
+      activeRival = nil
+    end
+
+    local id = mod.world:spawnNpc(mapId, {
+      index = 126,
+      name = "ALTERNATE_INTRO_RIVAL",
+      sprite = "SPRITE_BLUE",
+      x = x,
+      y = 0,
+      elevation = 3,
+      movement = "STAY",
+      range = "DOWN",
+    })
+    if not id then return nil end
+
+    local handle = mod.world:npc(mapId, id)
+    if not handle then
+      mod.world:removeNpc(id)
+      return nil
+    end
+
+    handle:placeAt(x, -1, "down")
+    activeRival = id
+    return handle
+  end
+
+  local function removeRival()
+    if activeRival then
+      pcall(mod.world.removeNpc, mod.world, activeRival)
+      activeRival = nil
+    end
+  end
+
+  local function move(handle, dir, count, done)
+    if count <= 0 then
+      done()
+      return
+    end
+    handle:scriptMove(dir, 1, function()
+      move(handle, dir, count - 1, done)
+    end)
+  end
+
+  local function departRival(handle, playerX)
+    local side = playerX == 12 and "right" or "left"
+    local turn = side == "right" and "right" or "left"
+
+    move(handle, "down", 1, function()
+      move(handle, side, 1, function()
+        move(handle, "up", 2, function()
+          move(handle, turn, 1, function()
+            move(handle, "up", 2, removeRival)
+          end)
+        end)
+      end)
+    end)
+  end
+
+  local function startRivalBattle(mapId, x, y)
+    if encounterRunning or mod.save:get("firered_pallet_rival_done") then
+      return true
+    end
+
+    local species = tonumber(mod.save:get("firered_starter"))
+    local trainerId = RIVAL_TRAINERS[species]
+    if not trainerId then return false end
+
+    local handle = spawnRival(mapId, x)
+    if not handle then return false end
+
+    encounterRunning = true
+    mod.save:set("firered_pallet_rival_done", true)
+    setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
+
+    if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+      Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+    end
+    if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+      Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+    end
+
+    local playerName = liveGame.save.player.name or "RED"
+    local rivalName = liveGame.save.rivalName or "BLUE"
+    local foe = Trainers.foeFromId(trainerId)
+    if not foe then
+      removeRival()
+      encounterRunning = false
+      return false
+    end
+
+    foe.trainerId = trainerId
+    foe.trainerName = rivalName
+    foe.moves = RIVAL_MOVES[species]
+    foe.party[1].moves = RIVAL_MOVES[species]
+
+    local function beginBattle()
+      local ok = BattleBridge.start(mod, liveGame, foe, {
+        trainerId = trainerId,
+        trainerName = rivalName,
+        trainerClass = foe.trainerClass,
+        trainerClassName = foe.trainerClassName,
+        trainerPicId = foe.trainerPic,
+        earlyRival = true,
+        rivalFlags = 1,
+        noWhiteout = true,
+        rivalName = rivalName,
+        defeatText = "Not bad, " .. playerName .. "!\\nYou're pretty tough.",
+        done = function()
+          Party.healAll(liveGame.save.party)
+          rivalDialog(
+            "I need to train my POKéMON more.\\n" ..
+            "I'll see you around, " .. playerName .. "!",
+            function()
+              departRival(handle, x)
+            end
+          )
+        end,
+      })
+      if not ok then
+        removeRival()
+        encounterRunning = false
+      end
+    end
+
+    move(handle, "down", 3, function()
+      handle:face("down")
+      rivalDialog(
+        "Hey, " .. playerName .. "!\\n" ..
+        "Heading out already?\\n\\f" ..
+        "I've got a POKéMON too.\\nLet's have a battle!",
+        beginBattle
+      )
+    end)
+
+    return true
+  end
+
+  mod.events:on("game.ready", function(ev)
+    liveGame = ev.game
+  end)
+
+  mod.events:on("map.entered", function(ev)
+    if not ev.mapId then return end
+    if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+    end
+  end)
+
+  mod.events:on("world.stepped", function(ev)
+    if encounterRunning or mod.save:get("firered_pallet_rival_done") then return end
+    if not liveGame or not ev.mapId then return end
+    local mapId = tostring(ev.mapId)
+    if not mapId:find("PALLET_TOWN", 1, true)
+        or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
+      return
+    end
+    if ev.y ~= 1 or (ev.x ~= 12 and ev.x ~= 13) then return end
+    if not mod.save:get("firered_starter") then return end
+
+    startRivalBattle(ev.mapId, ev.x, ev.y)
   end)
 end
