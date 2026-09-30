@@ -854,7 +854,20 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
-    if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
+    local entered = tostring(ev.mapId)
+
+    -- Mom's sequence belongs to the first stable frame after the bedroom
+    -- transition. Install the field lock immediately; waiting for a later
+    -- update hook allowed the normal Gen3 field transition to consume the
+    -- event without ever starting the sequence.
+    if entered == "FR_PLAYERS_HOUSE_1F"
+        and liveGame
+        and mod.save:get("firered_starter")
+        and not mod.save:get("firered_mom_gift_done") then
+      runMomEvent()
+    end
+
+    if entered:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
       end
@@ -893,8 +906,7 @@ return function(mod)
         and mod.save:get("firered_starter")
         and not mod.save:get("firered_mom_gift_done") then
       local Player = require("src.core.game3.player")
-      local Warp = require("src.core.game3.warp")
-      if not Player.moving and not Warp.isBusy() then
+      if not Player.moving then
         runMomEvent()
       end
     end
@@ -905,7 +917,7 @@ return function(mod)
         and not mod.save:get("firered_pallet_rival_done") then
       local Player = require("src.core.game3.player")
       local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
-      if mapId == "PALLET_TOWN"
+      if (mapId == "FR_PALLET_TOWN" or mapId == "PALLET_TOWN")
           and (x == 12 or x == 13)
           and y == 1
           and Player.facing == "up" then
