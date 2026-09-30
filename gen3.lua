@@ -669,24 +669,40 @@ return function(mod)
       moveHome()
     end
 
+    local function showItem(itemText, explanation, fanfare, done)
+      Message.show(itemText, {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+        done = function()
+          Audio.playFanfare(fanfare)
+          Message.show(explanation, {
+            npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+            done = function()
+              Audio.waitFanfare(done)
+            end,
+          })
+        end,
+      })
+    end
+
     local function giveShoes()
       if Flags.IDS.SYS_B_DASH then
         Flags.setFlag(Space.store, nil, Flags.IDS.SYS_B_DASH, true)
       end
-      Audio.playFanfare("MUS_OBTAIN_ITEM")
-      Message.show(
+      showItem(
         playerName(liveGame) .. " got the RUNNING SHOES!",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = finish }
+        "They let you run while you hold the B Button.",
+        "MUS_OBTAIN_ITEM",
+        finish
       )
     end
 
     local function giveTeachyTv()
       Bag.add(session.bag, 366, 1)
-      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Message.show(
-        playerName(liveGame) .. " got the TEACHY TV!\f" ..
+      showItem(
+        playerName(liveGame) .. " got the TEACHY TV!",
         "You can use it if you need help.",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveShoes }
+        "MUS_OBTAIN_KEY_ITEM",
+        giveShoes
       )
     end
 
@@ -695,20 +711,21 @@ return function(mod)
       if Flags.IDS.EVENT_GOT_TOWN_MAP then
         Flags.setFlag(Space.store, nil, Flags.IDS.EVENT_GOT_TOWN_MAP, true)
       end
-      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Message.show(
+      showItem(
         playerName(liveGame) .. " got a TOWN MAP!",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveTeachyTv }
+        "It shows the towns and routes you've visited.",
+        "MUS_OBTAIN_KEY_ITEM",
+        giveTeachyTv
       )
     end
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
-      Audio.playFanfare("MUS_OBTAIN_ITEM")
-      Message.show(
-        playerName(liveGame) .. " got 10 POKé BALLs!\f" ..
-        "They're useful for catching wild POKéMON.",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveMap }
+      showItem(
+        playerName(liveGame) .. " got 10 POKé BALLs!",
+        "You can use POKé BALLs to catch wild POKéMON.",
+        "MUS_OBTAIN_ITEM",
+        giveMap
       )
     end
 
@@ -736,14 +753,69 @@ return function(mod)
       local function moveToPlayer()
         mx = tonumber(handle.cellX) or mx
         my = tonumber(handle.cellY) or my
-        if mx < px then
-          Objects.startTrack(handle.localId, { { kind = "step", dir = "right" } }, moveToPlayer)
-        elseif mx > px then
-          Objects.startTrack(handle.localId, { { kind = "step", dir = "left" } }, moveToPlayer)
-        elseif my < py then
-          Objects.startTrack(handle.localId, { { kind = "step", dir = "down" } }, moveToPlayer)
-        elseif my > py then
-          Objects.startTrack(handle.localId, { { kind = "step", dir = "up" } }, moveToPlayer)
+
+        local targets = {
+          { x = px - 1, y = py, dir = "right" },
+          { x = px + 1, y = py, dir = "left" },
+          { x = px, y = py - 1, dir = "down" },
+          { x = px, y = py + 1, dir = "up" },
+        }
+
+        local target
+        for _, candidate in ipairs(targets) do
+          if Collision.inBounds(candidate.x, candidate.y)
+              and Collision.isWalkable(candidate.x, candidate.y)
+              and not (candidate.x == mx and candidate.y == my)
+              and not Objects.at(candidate.x, candidate.y) then
+            target = candidate
+            break
+          end
+        end
+
+        if not target then
+          facePlayer()
+          return
+        end
+
+        local queue = { { x = mx, y = my, path = {} } }
+        local seen = { [mx .. ":" .. my] = true }
+        local dirs = {
+          { dx = 0, dy = -1, dir = "up" },
+          { dx = 0, dy = 1, dir = "down" },
+          { dx = -1, dy = 0, dir = "left" },
+          { dx = 1, dy = 0, dir = "right" },
+        }
+        local foundPath
+
+        local head = 1
+        while head <= #queue do
+          local node = queue[head]
+          head = head + 1
+          if node.x == target.x and node.y == target.y then
+            foundPath = node.path
+            break
+          end
+
+          for _, d in ipairs(dirs) do
+            local nx, ny = node.x + d.dx, node.y + d.dy
+            local key = nx .. ":" .. ny
+            if not seen[key]
+                and Collision.inBounds(nx, ny)
+                and Collision.isWalkable(nx, ny)
+                and not (nx == px and ny == py)
+                and not Objects.at(nx, ny) then
+              seen[key] = true
+              local path = {}
+              for i, step in ipairs(node.path) do path[i] = step end
+              path[#path + 1] = d.dir
+              queue[#queue + 1] = { x = nx, y = ny, path = path }
+            end
+          end
+        end
+
+        if foundPath and #foundPath > 0 then
+          local dir = foundPath[1]
+          Objects.startTrack(handle.localId, { { kind = "step", dir = dir } }, moveToPlayer)
         else
           facePlayer()
         end
