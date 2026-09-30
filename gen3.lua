@@ -481,8 +481,10 @@ return function(mod)
     session.flags[43] = false
     session.flags[44] = true
     session.flags[45] = true
-    session.flags[0x828] = true
-    session.flags[0x829] = true
+    -- FireRed's special flags are what actually expose these start-menu
+    -- entries.  Keep these separate from the normal event flags.
+    session.flags[0x828] = true -- Pokémon menu
+    session.flags[0x829] = true -- Pokédex menu
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -612,12 +614,12 @@ return function(mod)
         rivalFlags = 1,
         noWhiteout = true,
         rivalName = rivalName,
-        defeatText = "Not bad, " .. playerName .. "!\\nYou're pretty tough.",
+        defeatText = "WHAT? Unbelievable! I picked the wrong POKéMON!",
         done = function()
           Party.healAll(liveGame.save.party)
           rivalDialog(
-            "I need to train my POKéMON more.\\n" ..
-            "I'll see you around, " .. playerName .. "!",
+            "OK! I'll make my POKéMON fight to toughen it up!\\n" ..
+            playerName .. "! Smell you later!",
             function()
               departRival(handle, x)
             end
@@ -637,9 +639,9 @@ return function(mod)
       move(handle, "left", 15 - x, function()
         handle:face("up")
       rivalDialog(
-        "Hey, " .. playerName .. "!\\n" ..
-        "Heading out already?\\n\\f" ..
-        "I've got a POKéMON too.\\nLet's have a battle!",
+        playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
+        "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
+        "Come on, I'll take you on!",
         beginBattle
       )
       end)
@@ -661,7 +663,9 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
       end
-      setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
+      -- Scene 1 is the original Oak-catches-you sequence.  Scene 3 is the
+      -- post-intro state, so never leave the vanilla grab trigger armed.
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
@@ -694,6 +698,21 @@ return function(mod)
       Field.unlock("alternate_oak_mom")
     end
 
+    local function giveShoes()
+      -- FireRed does not put the Running Shoes in the bag.  The item-like
+      -- behaviour is controlled by the special system flag 0x82F.
+      session.flags = session.flags or {}
+      session.flags[0x82F] = true
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
+      Audio.waitFanfare(function()
+        Message.show((session.player and session.player.name or "RED") ..
+          " got RUNNING SHOES!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+          done = finish,
+        })
+      end)
+    end
+
     local function giveMap()
       Bag.add(session.bag, 361, 1)
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
@@ -701,7 +720,7 @@ return function(mod)
         Message.show((session.player and session.player.name or "RED") ..
           " got a TOWN MAP!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-          done = finish,
+          done = giveShoes,
         })
       end)
     end
@@ -772,7 +791,9 @@ return function(mod)
 
     local Player = require("src.core.game3.player")
     local x, y = Player.cellX, Player.cellY
-    if tonumber(y) > 2 then return end
+    -- Mirror the Gen 1 implementation: the encounter fires only on the
+    -- actual north exit tile, not merely anywhere near the top of town.
+    if tonumber(y) ~= 1 then return end
     startRivalBattle(mapId, x, y)
   end)
 end
