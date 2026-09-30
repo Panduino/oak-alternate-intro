@@ -95,9 +95,14 @@ return function(mod)
     }
 
     local pageText = ""
+    local function addPage(raw)
+      p.pages[#p.pages + 1] = FrlgFont.wrap(raw, Chrome.DLG_W * 8, {
+        linePitch = FrlgFont.LINE_PITCH,
+      })
+    end
     for _, ch in ipairs(utf8Chars(text)) do
       if ch == "\f" then
-        p.pages[#p.pages + 1] = pageText
+        addPage(pageText)
         pageText = ""
         p.tokens[#p.tokens + 1] = "P"
       elseif ch == "\n" then
@@ -108,7 +113,7 @@ return function(mod)
         p.tokens[#p.tokens + 1] = "C"
       end
     end
-    p.pages[#p.pages + 1] = pageText
+    addPage(pageText)
     p.tokens[#p.tokens + 1] = "E"
     p.textSpeed = speed == 0 and 0 or speed - 1
 
@@ -240,10 +245,6 @@ return function(mod)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(img, 48, 68, 0, scale, scale, iw / 2, ih / 2)
-    FrlgFont.draw(row.name, 8, 118, {
-      colors = FrlgFont.COLOR.WHITE,
-      maxWidth = 80,
-    })
   end
 
   --------------------------------------------------------------------------
@@ -450,7 +451,13 @@ return function(mod)
   function Scene.Task_AlternateOakPokedexWait(self, t)
     if self:printerActive() then return end
     clearMessage()
-    t.data.timer = 0
+    showText(self, "Let's go!")
+    t.func = Scene.Task_AlternateOakLetsGo
+  end
+
+  function Scene.Task_AlternateOakLetsGo(self, t)
+    if self:printerActive() then return end
+    t.data.timer = 30
     t.func = originalOakSpeechFadeOutBGM
   end
 
@@ -481,23 +488,47 @@ return function(mod)
     local row = STARTER_BY_SPECIES[species]
     if not row then return end
 
-    -- Starter selection / Pokédex / opening progression.
+    -- Match the actual FireRed post-Pokédex state.
     setSessionVar(session, "VAR_STARTER_MON", row.index)
+    setSessionVar(session, "VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
     setSessionVar(session, "VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
-    setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN", 2)
-    setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 1)
+    setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
+    setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN", 1)
+    setSessionVar(session, "VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
+    setSessionVar(session, "VAR_MAP_SCENE_ROUTE22", 1)
     setSessionVar(session, "VAR_MAP_SCENE_PALLET_TOWN_SIGN_LADY", 2)
 
-    -- These are the existing early-game progression flags used by the
-    -- FireRed field scripts for the post-opening state.
-    session.flags[40] = true
-    session.flags[41] = true
-    session.flags[42] = true
-    session.flags[45] = true
-    session.flags[0x829] = true
+    local progressionFlags = {
+      "FLAG_SYS_POKEMON_GET",
+      "FLAG_SYS_POKEDEX_GET",
+      "FLAG_SYS_B_DASH",
+      "FLAG_OPENED_START_MENU",
+      "FLAG_PALLET_LADY_NOT_BLOCKING_SIGN",
+      "FLAG_VISITED_OAKS_LAB",
+      "FLAG_BEAT_RIVAL_IN_OAKS_LAB",
+      "FLAG_WORLD_MAP_PALLET_TOWN",
+      "FLAG_WORLD_MAP_VIRIDIAN_CITY",
+    }
+    for _, name in ipairs(progressionFlags) do
+      if Flags.IDS[name] then
+        session.flags[Flags.IDS[name]] = true
+      end
+    end
 
-    if Flags.IDS.EVENT_GOT_TOWN_MAP then
-      session.flags[Flags.IDS.EVENT_GOT_TOWN_MAP] = true
+    -- The physical map and Pokédex objects have already been received.
+    if Flags.IDS.FLAG_HIDE_TOWN_MAP then
+      session.flags[Flags.IDS.FLAG_HIDE_TOWN_MAP] = true
+    end
+    if Flags.IDS.FLAG_HIDE_POKEDEX then
+      session.flags[Flags.IDS.FLAG_HIDE_POKEDEX] = true
+    end
+
+    -- Oak is present in the lab; his lab rival is not.
+    if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+      session.flags[Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB] = false
+    end
+    if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+      session.flags[Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB] = true
     end
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
@@ -778,6 +809,10 @@ return function(mod)
       end
 
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN", 1)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
+      setVar("VAR_MAP_SCENE_ROUTE22", 1)
     end
   end)
 
