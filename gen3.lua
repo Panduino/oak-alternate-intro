@@ -153,8 +153,12 @@ return function(mod)
           self.arrowIdx, self.arrowDelay = 0, 0
           return "update"
         elseif tok == "E" or tok == nil then
-          self.active = false
-          return "finish"
+          -- Keep the final page on screen until A is pressed, just like a
+          -- normal FireRed dialogue page.
+          self.state = "clear"
+          self.arrowIdx, self.arrowDelay = 0, 0
+          self._finalPage = true
+          return "update"
         end
 
         self.revealed = self.revealed + 1
@@ -171,10 +175,15 @@ return function(mod)
 
       if newAB then
         Audio.playSe(SE.SE_SELECT)
-        self.page = self.page + 1
-        self.revealed = 0
-        self.arrowFrame = nil
-        self.state = "char"
+        if self._finalPage then
+          self.active = false
+          self.arrowFrame = nil
+        else
+          self.page = self.page + 1
+          self.revealed = 0
+          self.arrowFrame = nil
+          self.state = "char"
+        end
       end
       return "update"
     end
@@ -339,28 +348,60 @@ return function(mod)
       return
     end
 
-    clearMessage()
-    self._alternateStarterNamingTask = t
-    self._alternateStarterNaming = true
+    if not self._alternateNicknameChoice then
+      self._alternateNicknameChoice = true
+      self.win.menu = {
+        kind = "yesno",
+        left = 12,
+        top = 8,
+        width = 6,
+        height = 4,
+        items = {
+          { "YES", 8, 2 },
+          { "NO", 8, 18 },
+        },
+        cursorX = 0,
+        cursorY = 2,
+        pitch = 16,
+        cursor = 0,
+      }
+      return
+    end
 
-    local Pal = require("src.core.game3.pal_fade")
-    self.naming = { stage = "setup", timer = 8, pal = Pal.new() }
-    self.naming.pal:blend(Pal.ALL, 16, Pal.BLACK)
+    local result = self:menuInput(false)
+    if result == "none" then return end
 
-    local scene = self
-    Naming.open({
-      title = Naming.monTitle(row.name),
-      maxLen = 10,
-      initialText = row.name,
-      template = "NICKNAME",
-      species = row.species,
-      hold = true,
-      onDone = function(name)
-        scene._alternateStarterNickname = name and name ~= "" and name or row.name
-        scene.naming.stage = "fade_out"
-        scene.naming.pal:beginFade(Pal.ALL, 0, 0, 16, Pal.BLACK)
-      end,
-    })
+    self.win.menu = nil
+    self._alternateNicknameChoice = false
+
+    if result == 0 then
+      clearMessage()
+      self._alternateStarterNamingTask = t
+      self._alternateStarterNaming = true
+
+      local Pal = require("src.core.game3.pal_fade")
+      self.naming = { stage = "setup", timer = 8, pal = Pal.new() }
+      self.naming.pal:blend(Pal.ALL, 16, Pal.BLACK)
+
+      local scene = self
+      Naming.open({
+        title = Naming.monTitle(row.name),
+        maxLen = 10,
+        initialText = row.name,
+        template = "NICKNAME",
+        species = row.species,
+        hold = true,
+        onDone = function(name)
+          scene._alternateStarterNickname = name and name ~= "" and name or row.name
+          scene.naming.stage = "fade_out"
+          scene.naming.pal:beginFade(Pal.ALL, 0, 0, 16, Pal.BLACK)
+        end,
+      })
+    else
+      self._alternateStarterNickname = row.name
+      t.data.timer = 1
+      t.func = Scene.Task_AlternateOakStarterAfterNaming
+    end
   end
 
   local originalNamingFrame = Scene.namingFrame
@@ -639,6 +680,16 @@ return function(mod)
       )
     end
 
+    local function giveTeachyTv()
+      Bag.add(session.bag, 366, 1)
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
+      Message.show(
+        playerName(liveGame) .. " got the TEACHY TV!\f" ..
+        "You can use it if you need help.",
+        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveShoes }
+      )
+    end
+
     local function giveMap()
       Bag.add(session.bag, 361, 1)
       if Flags.IDS.EVENT_GOT_TOWN_MAP then
@@ -647,7 +698,7 @@ return function(mod)
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
       Message.show(
         playerName(liveGame) .. " got a TOWN MAP!",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveShoes }
+        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveTeachyTv }
       )
     end
 
@@ -954,6 +1005,7 @@ return function(mod)
   --------------------------------------------------------------------------
 
   mod.hooks:wrap("core.update", function(next, game, dt)
+    local result = next(game, dt)
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
 
     if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
@@ -992,6 +1044,6 @@ return function(mod)
       runMomEvent()
     end
 
-    return next(game, dt)
+    return result
   end)
 end
