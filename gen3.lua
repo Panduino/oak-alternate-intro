@@ -234,6 +234,12 @@ return function(mod)
     originalDrawBg0Text(self)
     if not self._alternateStarterMenu then return end
 
+    local menu = self.win.menu
+    if menu and type(menu.cursor) == "number" then
+      local cursorRow = STARTERS[menu.cursor + 1]
+      if cursorRow then self._alternateStarterSpecies = cursorRow.species end
+    end
+
     local row = starterRow(self)
     local entry = starterImage(self)
     if not (row and entry and entry.image) then return end
@@ -527,6 +533,21 @@ return function(mod)
     if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
       session.flags[Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB] = false
     end
+
+    local taken = { [row.species] = true }
+    if row.species == 1 then taken[4] = true
+    elseif row.species == 4 then taken[7] = true
+    elseif row.species == 7 then taken[1] = true end
+    local ballFlags = {
+      [1] = "FLAG_HIDE_BULBASAUR_BALL",
+      [4] = "FLAG_HIDE_CHARMANDER_BALL",
+      [7] = "FLAG_HIDE_SQUIRTLE_BALL",
+    }
+    for speciesId, flagName in pairs(ballFlags) do
+      local flag = Flags.IDS[flagName]
+      if flag then session.flags[flag] = taken[speciesId] == true end
+    end
+
     if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
       session.flags[Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB] = true
     end
@@ -813,6 +834,27 @@ return function(mod)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN", 1)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_ROUTE22", 1)
+
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      local species = tonumber(mod.save:get("firered_starter"))
+      local taken = { [species] = true }
+      if species == 1 then taken[4] = true
+      elseif species == 4 then taken[7] = true
+      elseif species == 7 then taken[1] = true end
+      local ballFlags = {
+        [1] = "FLAG_HIDE_BULBASAUR_BALL",
+        [4] = "FLAG_HIDE_CHARMANDER_BALL",
+        [7] = "FLAG_HIDE_SQUIRTLE_BALL",
+      }
+      for speciesId, flagName in pairs(ballFlags) do
+        local flag = Flags.IDS[flagName]
+        if flag then Flags.setFlag(Space.store, nil, flag, taken[speciesId] == true) end
+      end
     end
   end)
 
@@ -855,9 +897,34 @@ return function(mod)
   mod.hooks:wrap("core.update", function(next, game, dt)
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
 
+    if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      local species = tonumber(mod.save:get("firered_starter"))
+      local taken = { [species] = true }
+      if species == 1 then taken[4] = true
+      elseif species == 4 then taken[7] = true
+      elseif species == 7 then taken[1] = true end
+      local ballFlags = {
+        [1] = "FLAG_HIDE_BULBASAUR_BALL",
+        [4] = "FLAG_HIDE_CHARMANDER_BALL",
+        [7] = "FLAG_HIDE_SQUIRTLE_BALL",
+      }
+      for speciesId, flagName in pairs(ballFlags) do
+        local flag = Flags.IDS[flagName]
+        if flag then Flags.setFlag(Space.store, nil, flag, taken[speciesId] == true) end
+      end
+    end
+
     if liveGame
         and not momEventRunning
-        and mapId == "FR_PLAYERS_HOUSE_1F"
+        and (mapId == "PalletTown_PlayersHouse_1F"
+          or mapId == "FR_PLAYERS_HOUSE_1F"
+          or mapId:find("PLAYERS_HOUSE_1F", 1, true))
         and mod.save:get("firered_starter")
         and not mod.save:get("firered_mom_gift_done")
         and not Player.moving
