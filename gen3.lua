@@ -81,7 +81,7 @@ return function(mod)
   -- by the Oak scene itself, with the normal page arrow and A-button input.
   local function utf8Chars(s)
     local out = {}
-    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
+    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
       out[#out + 1] = ch
     end
     return out
@@ -96,11 +96,11 @@ return function(mod)
 
     local pageText = ""
     for _, ch in ipairs(utf8Chars(text)) do
-      if ch == "\\f" then
+      if ch == "\f" then
         p.pages[#p.pages + 1] = pageText
         pageText = ""
         p.tokens[#p.tokens + 1] = "P"
-      elseif ch == "\\n" then
+      elseif ch == "\n" then
         pageText = pageText .. ch
         p.tokens[#p.tokens + 1] = "N"
       else
