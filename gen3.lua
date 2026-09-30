@@ -131,33 +131,34 @@ return function(mod)
   --------------------------------------------------------------------------
   -- Oak speech
   --
-  -- The native FireRed name sequence is left alone. The only native task
-  -- seam we replace is FadeOutBGM, which is assigned dynamically by the
-  -- native LetsGo task. This avoids changing an already-created task's
-  -- function reference.
+  -- Leave the native player/rival naming sequence completely untouched.
+  -- The native ReshowPlayersPic task is the transition immediately after
+  -- the rival name has been confirmed. We replace only that transition so
+  -- the native LetsGo text is never printed.
   --------------------------------------------------------------------------
 
-  local originalOakSpeechFadeOutBGM = Scene.Task_OakSpeech_FadeOutBGM
+  local originalOakSpeechReshowPlayersPic = Scene.Task_OakSpeech_ReshowPlayersPic
 
-  mod.events:on("intro.oak_speech.step", function(ev)
-    local speech = ev and ev.speech
-    local step = ev and ev.step
-    if speech and step and step.id == "lets_go" and not speech._alternateStarterPending then
-      speech._alternateStarterPending = true
-      speech:clearDialog()
-    end
-  end)
+  Scene.Task_OakSpeech_ReshowPlayersPic = function(self, t)
+    local d = t.data
+    if d.picFadeState == 0 then return end
 
-  Scene.Task_OakSpeech_FadeOutBGM = function(self, t)
-    if self._alternateStarterPending and not self._alternateStarterStarted then
-      self._alternateStarterPending = false
-      self._alternateStarterStarted = true
-      clearMessage()
-      t.data.timer = 0
-      t.func = Scene.Task_AlternateOakStarterIntro
+    self:clearTrainerPic()
+
+    if d.timer ~= 0 then
+      d.timer = d.timer - 1
       return
     end
-    return originalOakSpeechFadeOutBGM(self, t)
+
+    self:loadPlayerPic()
+    d.picPosX = 0
+    self.coordOffsetX = 0
+    self.bg2X = 0
+    self:createFadeOutTask(t, 2)
+
+    -- This is the exact point where vanilla FireRed would assign
+    -- Task_OakSpeech_LetsGo. Go straight into the alternate sequence.
+    t.func = Scene.Task_AlternateOakStarterIntro
   end
 
   function Scene.Task_AlternateOakStarterIntro(self, t)
@@ -298,7 +299,7 @@ return function(mod)
   function Scene.Task_AlternateOakPokedex(self, t)
     if self._alternatePokedexShown then
       if Message.isOpen() then return end
-      t.func = originalOakSpeechFadeOutBGM
+      t.func = Scene.Task_AlternateOakPokedexWait
       return
     end
 
@@ -331,7 +332,7 @@ return function(mod)
     if Message.isOpen() then return end
     clearMessage()
     t.data.timer = 0
-    t.func = originalOakSpeechFadeOutBGM
+    t.func = originalOakSpeechReshowPlayersPic
   end
 
   --------------------------------------------------------------------------
