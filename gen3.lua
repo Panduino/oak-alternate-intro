@@ -510,6 +510,7 @@ return function(mod)
 
     session.vars[0x4031] = row.index
     session.vars[0x4050] = 3
+    session.vars[0x4051] = 2 -- Viridian tutorial old man already completed
     session.vars[0x4055] = 6
     session.vars[0x4057] = 2
     session.vars[0x4058] = 2
