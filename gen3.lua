@@ -857,17 +857,6 @@ return function(mod)
         and not mod.save:get("firered_mom_gift_done") then
       runMomEvent()
     end
-    if tostring(ev.mapId):find("PALLET_TOWN", 1, true)
-        and not tostring(ev.mapId):find("PROFESSOR_OAKS_LAB", 1, true)
-        and mod.save:get("firered_starter")
-        and mod.save:get("firered_mom_gift_done")
-        and not mod.save:get("firered_pallet_rival_done") then
-      local Player = require("src.core.game3.player")
-      local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
-      if (x == 12 or x == 13) and y <= 2 then
-        startRivalBattle(tostring(ev.mapId), x, y)
-      end
-    end
     if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
