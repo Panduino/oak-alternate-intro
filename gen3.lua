@@ -43,16 +43,19 @@ return function(mod)
   local RIVAL_OBJECT_ID = 8
 
   local function rawPrint(scene, text)
+    text = text:gsub("\\\\f", "\f")
     local pages = {}
-    for page in (text .. "\\f"):gmatch("(.-)\\\\f") do
+    for page in (text .. "\f"):gmatch("(.-)\f") do
       pages[#pages + 1] = page
     end
+
     local printer = {
       pages = pages,
       page = 1,
       active = true,
       shown = false,
     }
+
     function printer:run(newAB)
       if not self.active then return end
       if not self.shown then
@@ -68,12 +71,14 @@ return function(mod)
         end
       end
     end
+
     function printer:draw(x, y, opts)
       FrlgFont.draw(self.pages[self.page] or "", x, y, {
         maxWidth = opts.maxWidth,
         colors = opts.colors,
       })
     end
+
     scene.win.dialog = true
     scene.printer = printer
   end
@@ -180,6 +185,45 @@ return function(mod)
 
     self:clearDialog()
     self._alternateStarterNamingTask = t
+    self.win.menu = {
+      kind = "yesno",
+      left = 2,
+      top = 2,
+      width = 6,
+      height = 4,
+      items = {
+        { "Yes", 8, 2 },
+        { "No", 8, 18 },
+      },
+      cursorX = 0,
+      cursorY = 2,
+      pitch = 16,
+      cursor = 0,
+    }
+    t.func = Scene.Task_AlternateOakStarterNicknameChoice
+  end
+
+  function Scene.Task_AlternateOakStarterNicknameChoice(self, t)
+    local r = self:menuInput(false)
+    if r == "none" then return end
+
+    self.win.menu = nil
+    if r == 1 then
+      local row = starterRow(self)
+      self._alternateStarterNickname = row and row.name or "POKéMON"
+      t.data.timer = 0
+      t.func = Scene.Task_AlternateOakStarterAfterNaming
+      return
+    end
+
+    local row = starterRow(self)
+    if not row then
+      t.func = Scene.Task_OakSpeech_FadeInRivalPic
+      return
+    end
+
+    self:clearDialog()
+    self._alternateStarterNamingTask = t
     self._alternateStarterNaming = true
 
     local Pal = require("src.core.game3.pal_fade")
@@ -200,6 +244,7 @@ return function(mod)
         scene.naming.pal:beginFade(Pal.ALL, 0, 0, 16, Pal.BLACK)
       end,
     })
+  end
   end
 
   local originalNamingFrame = Scene.namingFrame
@@ -289,13 +334,14 @@ return function(mod)
     if not row then return end
 
     session.vars[0x4031] = row.index
-    session.vars[0x4055] = 4
+    session.vars[0x4055] = 6
 
     session.flags[40] = true
     session.flags[41] = true
     session.flags[42] = true
     session.flags[45] = true
     session.flags[0x829] = true
+    session.flags[0x258] = true
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -456,8 +502,62 @@ return function(mod)
     liveGame = ev.game
   end)
 
+  local function giveMomItems()
+    local Bag = require("src.core.game3.bag")
+    local session = liveGame and liveGame.save
+    if not session then return end
+    session.bag = session.bag or Bag.new()
+    Bag.add(session.bag, 4, 10)
+    Bag.add(session.bag, 361, 1)
+  end
+
+  local function runMomEvent()
+    if not liveGame or mod.save:get("firered_mom_gift_done") then return end
+    local handle = mod.world:npc("FR_PLAYERS_HOUSE_1F", 1)
+    if not handle then return end
+
+    mod.save:set("firered_mom_gift_done", true)
+    local playerX = liveGame.save.x or 8
+    local playerY = liveGame.save.y or 5
+
+    local function finish()
+      local Bag = require("src.core.game3.bag")
+      local session = liveGame.save
+      session.bag = session.bag or Bag.new()
+      Bag.add(session.bag, 4, 10)
+      Message.show((session.player and session.player.name or liveGame.save.player and liveGame.save.player.name or "RED") ..
+        " got 10 POKé BALLs!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+          done = function()
+            Bag.add(session.bag, 361, 1)
+            Message.show((session.player and session.player.name or liveGame.save.player and liveGame.save.player.name or "RED") ..
+              " got a TOWN MAP!", {
+              npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
+            })
+          end,
+        })
+    end
+
+    local Message = require("src.ui.game3.message")
+    handle:face("up")
+    Message.show("Right. All kids leave home\nsomeday. It said so on TV.", {
+      npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+      done = function()
+        Message.show("I've packed some fresh\nunderwear for you, too.\fYou'll need to be prepared\nfor your journey!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
+          done = finish,
+        })
+      end,
+    })
+  end
+
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
+    if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
+        and mod.save:get("firered_starter")
+        and not mod.save:get("firered_mom_gift_done") then
+      runMomEvent()
+    end
     if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
