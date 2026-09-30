@@ -316,7 +316,7 @@ return function(mod)
       "It automatically records data on POKéMON\f" ..
       "you've seen or caught!\f" ..
       "It's a hi-tech encyclopedia!\f" ..
-      "Take this with you, {PLAYER}!\f" ..
+      "Take this with you, " .. (self.playerName or "RED") .. "!\f" ..
       "It will help you on your journey.\f" ..
       "To make a complete guide on all the POKéMON in the world...\f" ..
       "That was my dream! But, I'm too old!\f" ..
@@ -362,7 +362,7 @@ return function(mod)
     if not row then return end
 
     -- Starter selection / Pokédex / opening progression.
-    setSessionVar(session, "VAR_STARTER", row.index)
+    setSessionVar(session, "VAR_STARTER_MON", row.index)
     setSessionVar(session, "VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
     setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN", 2)
     setSessionVar(session, "VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 1)
