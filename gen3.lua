@@ -6,7 +6,7 @@ return function(mod)
   local FrlgFont = require("src.ui.game3.frlg_font")
   local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
-  local Song = require("src.core.game3.song_ids")
+  local Song = { MUS_OBTAIN_ITEM = 258, MUS_OBTAIN_KEY_ITEM = 318 }
   local Flags = require("src.core.game3.scripting.flags")
   local Space = require("src.core.game3.scripting.space")
   local Trainers = require("src.core.game3.scripting.trainers")
