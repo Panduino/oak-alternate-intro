@@ -296,6 +296,14 @@ return function(mod)
     })
   end
 
+  local function removeRival()
+    if activeRival then
+      local Objects = require("src.core.game3.objects")
+      Objects.removeObject(activeRival)
+      activeRival = nil
+    end
+  end
+
   local function spawnRival(mapId, x)
     if activeRival then
       removeRival()
@@ -313,14 +321,6 @@ return function(mod)
     handle:placeAt(15, 8, "up")
     activeRival = RIVAL_OBJECT_ID
     return handle
-  end
-
-  local function removeRival()
-    if activeRival then
-      local Objects = require("src.core.game3.objects")
-      Objects.removeObject(activeRival)
-      activeRival = nil
-    end
   end
 
   local function move(handle, dir, count, done)
