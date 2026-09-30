@@ -7,7 +7,22 @@
 -- Pokémon sprite resolver, which follows the imported game data and the same
 -- sprite override path used by compatible mods.
 
+local function installGen3(mod)
+  local source = mod:read("gen3.lua")
+  if not source then
+    error("alternate_oak_intro: missing gen3.lua")
+  end
+  local chunk = assert(load(source, "@alternate_oak_intro/gen3.lua"))
+  return chunk()(mod)
+end
+
 return function(mod)
+
+  local ok, GameVersion = pcall(require, "src.core.GameVersion")
+  if (mod.game and mod.game.version == "firered")
+      or (ok and GameVersion.get() == "firered") then
+    return installGen3(mod)
+  end
 
   -- The stock OakSpeech choice uses the generic Menu widget. The widget
   -- does not have a per-item preview API, so this mod adds a narrowly scoped
