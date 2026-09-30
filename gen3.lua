@@ -34,7 +34,7 @@ return function(mod)
   local RIVAL_MOVES = {
     [1] = { 33, 45 },
     [4] = { 10, 45 },
-    [7] = { 33, 39 },
+    [7] = { 33, 43 },
   }
 
   local liveGame
@@ -249,10 +249,7 @@ return function(mod)
     session.vars = session.vars or {}
     session.flags = session.flags or {}
 
-    setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
-    setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 4)
-
-    local species = tonumber(mod.save:get("firered_starter"))
+        local species = tonumber(mod.save:get("firered_starter"))
     local row = STARTER_BY_SPECIES[species]
     if not row then return end
 
