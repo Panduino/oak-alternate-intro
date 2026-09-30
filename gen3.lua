@@ -882,7 +882,7 @@ return function(mod)
   -- perform the Route 1 connection. This is the same point where vanilla
   -- Oak's Pallet Town trigger prevents the player from leaving town.
   mod.hooks:wrap("movement.collision", function(next, allowed, ctx)
-    if not allowed or encounterRunning or mod.save:get("firered_pallet_rival_done") then
+    if encounterRunning or mod.save:get("firered_pallet_rival_done") then
       return next(allowed, ctx)
     end
     if not liveGame or not ctx or not ctx.map then
