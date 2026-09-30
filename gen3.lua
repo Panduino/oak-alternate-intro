@@ -4,6 +4,7 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local SE = require("src.core.game3.se_ids")
   local Flags = require("src.core.game3.scripting.flags")
@@ -42,110 +43,135 @@ return function(mod)
   local encounterRunning = false
   local RIVAL_OBJECT_ID = 8
 
-  local function rawPrint(scene, text)
-    text = text:gsub("\\f", "\f")
-    text = text:gsub("\\n", "\n")
-    text = text:gsub("\\p", "\f")
-    text = text:gsub("\\l", "\n")
-    text = text:gsub("{PLAYER}", scene.playerName or "RED")
+  local ARROW_FRAMES = { 0, 1, 2, 1 }
+  local CURSOR_DELAY = 8
 
-    local pages = {}
-    local textWidth = 200
-    for page in (text .. "\f"):gmatch("(.-)\f") do
-      pages[#pages + 1] = FrlgFont.wrap(page, textWidth)
+  local function utf8Chars(s)
+    local out = {}
+    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+      out[#out + 1] = ch
     end
+    return out
+  end
 
-    local printer = {
-      pages = pages,
-      page = 1,
-      revealed = 0,
-      pos = 1,
-      active = true,
-      waiting = false,
-      delay = 0,
+  -- Exact FireRed printer state used by src/ui/game3/new_game_scene.lua.
+  local function newOakPrinter(text, speed, canSpeedUp)
+    local p = {
+      pages = {}, page = 1, revealed = 0, tokens = {}, pos = 1,
+      active = true, state = "char", delay = 0, spedUp = false,
+      canSpeedUp = canSpeedUp, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
     }
 
-    local function charCount(s)
-      return FrlgFont.countChars(s or "")
+    local pageText = ""
+    for _, ch in ipairs(utf8Chars(text)) do
+      if ch == "\f" then
+        p.pages[#p.pages + 1] = pageText
+        pageText = ""
+        p.tokens[#p.tokens + 1] = "P"
+      elseif ch == "\n" then
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "N"
+      else
+        pageText = pageText .. ch
+        p.tokens[#p.tokens + 1] = "C"
+      end
+    end
+    p.pages[#p.pages + 1] = pageText
+    p.tokens[#p.tokens + 1] = "E"
+
+    if speed == 0 then
+      p.textSpeed = 0
+      while p.active do
+        local tok = p.tokens[p.pos]
+        p.pos = p.pos + 1
+        if tok == "C" or tok == "N" then
+          p.revealed = p.revealed + 1
+        elseif tok == "E" or tok == nil then
+          p.active = false
+        end
+      end
+    else
+      p.textSpeed = speed - 1
     end
 
-    printer.total = charCount(printer.pages[1])
-
-    function printer:run(newAB, heldAB)
-      if not self.active then return end
-
-      if self.waiting then
-        if newAB then
-          Audio.playSe(SE.SE_SELECT)
-          if self.page < #self.pages then
-            self.page = self.page + 1
-            self.revealed = 0
-            self.pos = 1
-            self.waiting = false
+    function p:render(newAB, heldAB)
+      if self.state == "char" then
+        if heldAB and self.spedUp then self.delay = 0 end
+        if self.delay > 0 and self.textSpeed > 0 then
+          self.delay = self.delay - 1
+          if self.canSpeedUp and newAB then
+            self.spedUp = true
             self.delay = 0
-            self.total = charCount(self.pages[self.page])
-          else
-            self.active = false
           end
+          return "update"
         end
-        return
+
+        self.delay = self.textSpeed
+        local tok = self.tokens[self.pos]
+        self.pos = self.pos + 1
+        if tok == "N" then
+          self.revealed = self.revealed + 1
+          return "repeat"
+        end
+        if tok == "P" then
+          self.state = "clear"
+          self.arrowIdx, self.arrowDelay = 0, 0
+          return "update"
+        end
+        if tok == "E" or tok == nil then
+          self.active = false
+          return "finish"
+        end
+        self.revealed = self.revealed + 1
+        return "print"
       end
 
-      local speed = tonumber(scene.textSpeed) or 4
-      if speed < 1 then speed = 1 end
-      if heldAB then speed = 0 end
-
-      if self.delay > 0 then
-        self.delay = self.delay - 1
-        return
+      if self.arrowDelay ~= 0 then
+        self.arrowDelay = self.arrowDelay - 1
+      else
+        self.arrowFrame = ARROW_FRAMES[self.arrowIdx + 1]
+        self.arrowDelay = CURSOR_DELAY
+        self.arrowIdx = (self.arrowIdx + 1) % 4
       end
 
-      if self.revealed >= self.total then
-        self.waiting = true
-        return
-      end
-
-      self.revealed = self.revealed + 1
-      self.delay = speed - 1
       if newAB then
-        self.delay = 0
+        Audio.playSe(SE.SE_SELECT)
+        self.page = self.page + 1
+        self.revealed = 0
+        self.arrowFrame = nil
+        self.state = "char"
+      end
+      return "update"
+    end
+
+    function p:run(newAB, heldAB)
+      if not self.active then return end
+      for _ = 1, 64 do
+        if self:render(newAB, heldAB) ~= "repeat" then return end
       end
     end
 
-    function printer:draw(x, y, opts)
-      local pageText = self.pages[self.page] or ""
-      FrlgFont.draw(pageText, x, y, {
-        maxWidth = opts.maxWidth,
-        colors = opts.colors or FrlgFont.COLOR.NORMAL,
-        linePitch = FrlgFont.LINE_PITCH,
+    function p:draw(x, y, opts)
+      local textPage = self.pages[self.page] or ""
+      local _, endX, endY = FrlgFont.draw(textPage, x, y, {
+        maxWidth = opts.maxWidth or 240,
         limitChars = self.revealed,
+        colors = opts.colors or FrlgFont.COLOR.NORMAL,
+        linePitch = opts.linePitch,
       })
-
-      -- FireRed displays its red continuation arrow when the current
-      -- dialogue page has finished printing and another page follows.
-      -- Do not show it on the final page (including pages that lead into
-      -- a question/menu).
-      if self.waiting and self.page < #self.pages then
-        local lineCount = 1
-        for _ in pageText:gmatch("\\n") do
-          lineCount = lineCount + 1
-        end
-
-        local arrowX = x + (opts.maxWidth or 200) - 8
-        local arrowY = y + lineCount * FrlgFont.LINE_PITCH + 2
-        love.graphics.setColor(1, 0, 0, 1)
-        love.graphics.polygon(
-          "fill",
-          arrowX - 4, arrowY - 3,
-          arrowX + 4, arrowY - 3,
-          arrowX, arrowY + 3
-        )
-        love.graphics.setColor(1, 1, 1, 1)
+      if self.state == "clear" and self.arrowFrame and endX then
+        Chrome.promptArrow(endX, endY, self.arrowFrame)
       end
     end
 
+    return p
+  end
+
+  local function rawPrint(scene, text)
+    text = tostring(text or "")
+    text = text:gsub("{PLAYER}", scene.playerName or "RED")
     scene.win.dialog = true
-    scene.printer = printer
+    scene.printer = newOakPrinter(text, scene.textSpeed, true)
   end
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -447,6 +473,7 @@ return function(mod)
 
   function Scene.Task_AlternateOakPokedexText(self, t)
     if t.data.picFadeState == 0 then return end
+    if self.pic then self.pic.hidden = false end
     if self:printerActive() then return end
 
     if t.data.page == nil then
@@ -494,9 +521,10 @@ return function(mod)
     if not row then return end
 
     session.vars[0x4031] = row.index
-    session.vars[0x4050] = 1
+    session.vars[0x4050] = 3
     session.vars[0x4055] = 6
     session.vars[0x4057] = 2
+    session.vars[0x4058] = 2
 
     session.flags[40] = true
     session.flags[41] = true
@@ -551,21 +579,34 @@ return function(mod)
   end
 
   local function spawnRival(mapId, x)
-    if activeRival then
-      removeRival()
+    local Objects = require("src.core.game3.objects")
+    local GfxIds = require("src.core.game3.scripting.gfx_ids")
+    local localId = 3 -- LOCALID_PALLET_PROF_OAK
+
+    Objects.showObject(localId)
+    local eo = Objects.find(localId)
+    if not eo then return nil end
+
+    -- FireRed OBJ_EVENT_GFX_RIVAL is graphics ID 72 (Blue).
+    eo.graphicsId = 72
+    eo.sprite = GfxIds.spriteFor(72) or "SPRITE_BLUE"
+    eo.hidden = false
+    eo.visible = true
+    eo.invisible = false
+    if eo.def then
+      eo.def.graphicsId = 72
+      eo.def.sprite = eo.sprite
+      eo.def.hidden = false
     end
 
-    local Objects = require("src.core.game3.objects")
-    if not Objects.addObject(RIVAL_OBJECT_ID) then return nil end
-
-    local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
+    local handle = mod.world:npc(mapId, localId)
     if not handle then
-      Objects.removeObject(RIVAL_OBJECT_ID)
+      Objects.removeObject(localId)
       return nil
     end
 
     handle:placeAt(15, 8, "up")
-    activeRival = RIVAL_OBJECT_ID
+    activeRival = localId
     return handle
   end
 
@@ -613,7 +654,7 @@ return function(mod)
       Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
     end
 
-    local playerName = liveGame.save.player.name or "RED"
+    local playerName = liveGame.save.playerName or liveGame.save.name or "RED"
     local rivalName = liveGame.save.rivalName or "BLUE"
     local foe = Trainers.foeFromId(trainerId)
     if not foe then
@@ -692,7 +733,10 @@ return function(mod)
       -- post-intro state, so never leave the vanilla grab trigger armed.
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
+      setFlag("FLAG_SYS_POKEMON_GET", true)
+      setFlag("FLAG_SYS_POKEDEX_GET", true)
     end
   end)
 
@@ -718,48 +762,56 @@ return function(mod)
 
     Field.lock("alternate_oak_mom")
 
+    local function afterFanfare(fn)
+      Audio.waitFanfare(function()
+        fn()
+      end)
+    end
+
     local function finish()
-      mod.save:set("firered_mom_gift_done", true)
-      Field.unlock("alternate_oak_mom")
+      -- Mom's original position is (8,4); she approached from there via
+      -- right 2, up 1, so reverse that path before releasing the field.
+      handle:scriptMove("left", 2, function()
+        handle:scriptMove("down", 1, function()
+          handle:face("up")
+          mod.save:set("firered_mom_gift_done", true)
+          Field.unlock("alternate_oak_mom")
+        end)
+      end)
     end
 
     local function giveShoes()
-      -- FireRed does not put the Running Shoes in the bag.  The item-like
-      -- behaviour is controlled by the special system flag 0x82F.
+      local dashFlag = Flags.IDS.FLAG_SYS_B_DASH or Flags.IDS.SYS_B_DASH or 0x82F
+      Flags.setFlag(Space.store, nil, dashFlag, true)
       session.flags = session.flags or {}
       session.flags[0x82F] = true
+
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Audio.waitFanfare(function()
-        Message.show((session.player and session.player.name or "RED") ..
-          " got RUNNING SHOES!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-          done = finish,
+      Message.showStay((session.playerName or session.name or "RED") ..
+        " got RUNNING SHOES!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         })
-      end)
+      afterFanfare(finish)
     end
 
     local function giveMap()
       Bag.add(session.bag, 361, 1)
       Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-      Audio.waitFanfare(function()
-        Message.show((session.player and session.player.name or "RED") ..
-          " got a TOWN MAP!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-          done = giveShoes,
+      Message.showStay((session.playerName or session.name or "RED") ..
+        " got a TOWN MAP!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         })
-      end)
+      afterFanfare(giveShoes)
     end
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
       Audio.playFanfare("MUS_LEVEL_UP")
-      Audio.waitFanfare(function()
-        Message.show((session.player and session.player.name or "RED") ..
-          " got 10 POKé BALLs!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
-          done = giveMap,
+      Message.showStay((session.playerName or session.name or "RED") ..
+        " got 10 POKé BALLs!", {
+          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         })
-      end)
+      afterFanfare(giveMap)
     end
 
     local function talk()
@@ -775,8 +827,6 @@ return function(mod)
       })
     end
 
-    -- The player enters the first floor at (10, 2); Mom starts at (8, 4).
-    -- Walk her to the tile directly below the player before starting dialogue.
     handle:scriptMove("right", 2, function()
       handle:scriptMove("up", 1, function()
         handle:face("up")
@@ -784,6 +834,7 @@ return function(mod)
       end)
     end)
   end
+
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
     if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
@@ -799,6 +850,7 @@ return function(mod)
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
+      setVar("VAR_MAP_SCENE_PALLET_TOWN_RIVALS_HOUSE", 2)
       setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 2)
     end
   end)
@@ -814,11 +866,8 @@ return function(mod)
     if not mod.save:get("firered_starter") then return end
     if not mod.save:get("firered_mom_gift_done") then return end
 
-    local Player = require("src.core.game3.player")
-    local x, y = Player.cellX, Player.cellY
-    -- Mirror the Gen 1 implementation: the encounter fires only on the
-    -- actual north exit tile, not merely anywhere near the top of town.
-    if tonumber(y) ~= 1 then return end
+    local x, y = tonumber(ev.x), tonumber(ev.y)
+    if y ~= 1 or (x ~= 12 and x ~= 13) then return end
     startRivalBattle(mapId, x, y)
   end)
 end
