@@ -183,7 +183,7 @@ return function(mod)
 
     if t.data.page == nil then
       t.data.page = 1
-      rawPrint(self, "Before you leave,\\nget yourself a\\nPOKéMON!")
+      rawPrint(self, "Before you leave,\\nyou should have a\\nPOKéMON of your own!")
       return
     end
 
@@ -410,7 +410,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakPokedexSetup(self, t)
-    if t.data.picFadeState == 0 then return end
+    if self:fadeActive() then return end
     self:clearTrainerPic()
     self:loadTrainerPic("oak")
     t.data.picPosX = 0
@@ -479,9 +479,6 @@ return function(mod)
     session.flags[44] = true
     session.flags[45] = true
     session.flags[0x829] = true
-
-    setFlag("FLAG_GOT_OAKS_PARCEL", true)
-    setFlag("FLAG_OAK_GOT_PARCEL", true)
 
     session.dex = session.dex or { seen = {}, owned = {}, caught = {} }
     session.dex.seen = session.dex.seen or {}
@@ -656,8 +653,7 @@ return function(mod)
       end
       setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
-      setFlag("FLAG_GOT_OAKS_PARCEL", true)
-      setFlag("FLAG_OAK_GOT_PARCEL", true)
+      setVar("VAR_MAP_SCENE_VIRIDIAN_CITY_MART", 1)
     end
   end)
 
@@ -728,7 +724,7 @@ return function(mod)
     local function walkToPlayer()
       mx, my = handle:position()
       if mx == px and my == py - 1 then
-        handle:face("up")
+        handle:face("down")
         talk()
         return
       end
@@ -745,7 +741,7 @@ return function(mod)
       end
 
       if not dir or steps >= 16 or not handle:canStep(dir) then
-        handle:face("up")
+        handle:face("down")
         talk()
         return
       end
@@ -782,7 +778,7 @@ return function(mod)
         or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
       return
     end
-    if ev.y ~= 2 or (ev.x ~= 12 and ev.x ~= 13) then return end
+    if ev.y > 2 or ev.x < 5 or ev.x > 18 then return end
     if not mod.save:get("firered_starter") then return end
     if not mod.save:get("firered_mom_gift_done") then return end
 
