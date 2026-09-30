@@ -552,7 +552,11 @@ return function(mod)
   end
 
   local function departRival(handle, playerX)
-    move(handle, "up", 2, removeRival)
+    move(handle, "up", 2, function()
+      removeRival()
+      encounterRunning = false
+      require("src.core.game3.field").unlock("alternate_oak_rival")
+    end)
   end
 
   local function startRivalBattle(mapId, x, y)
@@ -617,7 +621,6 @@ return function(mod)
             "I'll see you around, " .. playerName .. "!",
             function()
               departRival(handle, x)
-              require("src.core.game3.field").unlock("alternate_oak_rival")
             end
           )
         end,
