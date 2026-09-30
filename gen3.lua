@@ -810,7 +810,7 @@ return function(mod)
 
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
-      Audio.playFanfare("MUS_LEVEL_UP")
+      Audio.playFanfare("MUS_OBTAIN_ITEM")
       Message.showStay((session.playerName or session.name or "RED") ..
         " got 10 POKé BALLs!", {
           npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
