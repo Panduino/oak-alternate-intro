@@ -579,7 +579,9 @@ return function(mod)
     local Field = require("src.core.game3.field")
     Field.lock("alternate_oak_rival")
     encounterRunning = true
-    setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 1)
+    -- Keep the vanilla Pallet Town Oak scene in its completed state while
+    -- this replacement encounter runs.
+    setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
 
     if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
       Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
