@@ -247,14 +247,20 @@ return function(mod)
     t.func = originalOakSpeechLetsGo
   end
 
-  Scene.Task_OakSpeech_LetsGo = function(self, t)
-    if not self._alternateStarterInserted then
-      self._alternateStarterInserted = true
-      t.func = Scene.Task_AlternateOakStarterIntro
-      return
+  mod.events:on("intro.oak_speech.step", function(ev)
+    local speech = ev and ev.speech
+    local step = ev and ev.step
+    if not speech or not step or step.id ~= "lets_go" or speech._alternateStarterInserted then return end
+
+    for _, task in ipairs(speech.tasks or {}) do
+      if task.alive and task.func == originalOakSpeechLetsGo then
+        speech:clearDialog()
+        speech._alternateStarterInserted = true
+        task.func = Scene.Task_AlternateOakStarterIntro
+        break
+      end
     end
-    return originalOakSpeechLetsGo(self, t)
-  end
+  end)
 
   local function setVar(name, value)
     local id = Flags.VAR_IDS[name]
