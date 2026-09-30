@@ -736,7 +736,7 @@ return function(mod)
       showItem(
         playerName(liveGame) .. " got the RUNNING SHOES!",
         "They let you run while you hold the B Button.",
-        "MUS_OBTAIN_ITEM",
+        258,
         finish
       )
     end
@@ -746,7 +746,7 @@ return function(mod)
       showItem(
         playerName(liveGame) .. " got the TEACHY TV!",
         "You can use it if you need help.",
-        "MUS_OBTAIN_KEY_ITEM",
+        318,
         giveShoes
       )
     end
