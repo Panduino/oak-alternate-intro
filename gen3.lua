@@ -52,7 +52,7 @@ return function(mod)
 
   local function utf8Chars(s)
     local out = {}
-    for ch in s:gmatch("[%z\\1-\\127\\194-\\244][\\128-\\191]*") do
+    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
       out[#out + 1] = ch
     end
     return out
@@ -67,11 +67,11 @@ return function(mod)
 
     local pageText = ""
     for _, ch in ipairs(utf8Chars(text)) do
-      if ch == "\\f" then
+      if ch == "\f" then
         p.pages[#p.pages + 1] = FrlgFont.wrap(pageText, textWidth)
         pageText = ""
         p.tokens[#p.tokens + 1] = "P"
-      elseif ch == "\\n" then
+      elseif ch == "\n" then
         pageText = pageText .. ch
         p.tokens[#p.tokens + 1] = "N"
       else
@@ -170,10 +170,10 @@ return function(mod)
   end
 
   local function rawPrint(scene, text)
-    text = text:gsub("\\\\f", "\\f")
-    text = text:gsub("\\\\n", "\\n")
-    text = text:gsub("\\\\p", "\\f")
-    text = text:gsub("\\\\l", "\\n")
+    text = text:gsub("\\f", "\f")
+    text = text:gsub("\\n", "\n")
+    text = text:gsub("\\p", "\f")
+    text = text:gsub("\\l", "\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
 
     local _, _, dialogWidth = Chrome.dialogueWindow()
