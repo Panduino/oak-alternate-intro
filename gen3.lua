@@ -691,11 +691,9 @@ return function(mod)
       end
     end
 
-    -- Start from the south road, not from the Rival's house. The pathfinder
-    -- keeps every step on an actually walkable cell.
-    -- Preserve the movement sequence from the last known working
-    -- implementation. It is deliberately kept separate from spawning so
-    -- the appearance change cannot affect the encounter flow.
+    -- Start from the south side of Pallet Town, just like vanilla Oak.
+    -- The live EventObject is the actual Pallet Town Oak object; only its
+    -- appearance was changed to Rival.
     pathBetween(handle, x, 2, function(ok)
       if not ok then
         removeRival()
@@ -703,14 +701,15 @@ return function(mod)
         require("src.core.game3.field").unlock("alternate_oak_rival")
         return
       end
-        handle:face("up")
-        rivalDialog(
-          playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
-          "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
-          "Come on, I'll take you on!",
-          beginBattle
-        )
-      end)
+
+      handle:face("up")
+      rivalDialog(
+        playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
+        "Wait " .. playerName .. "! Let's check out our POKéMON!\\n" ..
+        "Come on, I'll take you on!",
+        beginBattle
+      )
+    end)
 
     return true
   end
