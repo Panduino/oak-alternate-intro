@@ -289,78 +289,51 @@ return function(mod)
   end)
 
   local function runMomEvent()
-    if momEventRunning then return end
-    if not liveGame or mod.save:get("firered_mom_gift_done") then return end
-
+    if momEventRunning or not liveGame or mod.save:get("firered_mom_gift_done") then return end
     local Objects = require("src.core.game3.objects")
     local Field = require("src.core.game3.field")
     local Bag = require("src.core.game3.bag")
     local Message = require("src.ui.game3.message")
-
     local handle = Objects.find(1)
-    if not handle then
-      Objects.addObject(1)
-      handle = Objects.find(1)
-    end
     if not handle then return end
-
     local session = liveGame.save
     session.bag = session.bag or Bag.new()
-
     Field.lock("alternate_oak_mom")
     momEventRunning = true
-
     local function finish()
-      handle:scriptMove("left", 2, function()
-        handle:scriptMove("down", 1, function()
-          handle:face("left")
-          mod.save:set("firered_mom_gift_done", true)
-          momEventRunning = false
-          Field.unlock("alternate_oak_mom")
-        end)
+      handle:scriptMove("up", 1, function()
+        handle:face("left")
+        mod.save:set("firered_mom_gift_done", true)
+        momEventRunning = false
+        Field.unlock("alternate_oak_mom")
       end)
     end
-
+    local function giveShoes()
+      if Flags.IDS.SYS_B_DASH then Flags.setFlag(Space.store, nil, Flags.IDS.SYS_B_DASH, true) end
+      Audio.playFanfare("MUS_OBTAIN_ITEM")
+      Message.show((session.playerName or session.name or "RED") .. " got the RUNNING SHOES!", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = finish,
+      })
+    end
+    local function giveMap()
+      Bag.add(session.bag, 361, 1)
+      Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
+      Message.show((session.playerName or session.name or "RED") .. " got a TOWN MAP!", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveShoes,
+      })
+    end
     local function giveBalls()
       Bag.add(session.bag, 4, 10)
       Audio.playFanfare("MUS_OBTAIN_ITEM")
-      Message.show((session.playerName or session.name or "RED") ..
-        " got 10 POKé BALLs!", {
-          npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-          done = function()
-            Bag.add(session.bag, 361, 1)
-            Audio.playFanfare("MUS_OBTAIN_KEY_ITEM")
-            Message.show((session.playerName or session.name or "RED") ..
-              " got a TOWN MAP!", {
-                npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-                done = function()
-                  Message.show(
-                    "I've packed some fresh\\nunderwear for you, too.\\f" ..
-                    "You'll need to be prepared\\nfor your journey!",
-                    {
-                      npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-                      done = finish,
-                    }
-                  )
-                end,
-              }
-            )
-          end,
-        }
-      )
+      Message.show((session.playerName or session.name or "RED") .. " got 10 POKé BALLs!", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveMap,
+      })
     end
-
-    handle:scriptMove("right", 2, function()
-      handle:scriptMove("up", 1, function()
-        handle:face("up")
-        Message.show(
-          "Right. All kids leave home\\nsomeday. It said so on TV.",
-          {
-            npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
-            done = giveBalls,
-          }
-        )
-      end)
+    handle:scriptMove("down", 1, function()
+      handle:face("down")
+      Message.show("Right. All kids leave home\\nsomeday. It said so on TV.\\fI packed your things for your journey.", {
+        npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveBalls,
+      })
     end)
   end
 
@@ -372,39 +345,34 @@ return function(mod)
     })
   end
 
-  local function spawnRival(mapId, x)
-    if activeRival then
-      pcall(mod.world.removeNpc, mod.world, activeRival)
-      activeRival = nil
+  local function spawnRival(mapId, x, y)
+    local Objects = require("src.core.game3.objects")
+    local Collision = require("src.core.game3.collision")
+    local handle = Objects.find(8)
+    if not handle then return nil end
+    local startY
+    for candidate = y + 1, math.min(y + 8, 19) do
+      if Collision.inBounds(x, candidate) and Collision.isWalkable(x, candidate) and not Objects.at(x, candidate) then
+        startY = candidate
+        break
+      end
     end
-
-    local id = mod.world:spawnNpc(mapId, {
-      index = 126,
-      name = "ALTERNATE_INTRO_RIVAL",
-      sprite = "SPRITE_BLUE",
-      x = x,
-      y = 0,
-      elevation = 3,
-      movement = "STAY",
-      range = "DOWN",
-    })
-    if not id then return nil end
-
-    local handle = mod.world:npc(mapId, id)
-    if not handle then
-      mod.world:removeNpc(id)
-      return nil
-    end
-
-    handle:placeAt(x, -1, "down")
-    activeRival = id
-    return handle
+    if not startY then return nil end
+    handle.hidden = false
+    handle.visible = true
+    handle.invisible = false
+    handle.scriptBusy = false
+    handle:placeAt(x, startY, "up")
+    return handle, startY
   end
 
   local function removeRival()
-    if activeRival then
-      pcall(mod.world.removeNpc, mod.world, activeRival)
-      activeRival = nil
+    local Objects = require("src.core.game3.objects")
+    local handle = Objects.find(8)
+    if handle then
+      handle.hidden = false
+      handle.visible = true
+      handle.scriptBusy = false
     end
   end
 
@@ -419,18 +387,22 @@ return function(mod)
   end
 
   local function departRival(handle, playerX)
-    local side = playerX == 12 and "right" or "left"
-    local turn = side == "right" and "right" or "left"
-
-    move(handle, "down", 1, function()
-      move(handle, side, 1, function()
-        move(handle, "up", 2, function()
-          move(handle, turn, 1, function()
-            move(handle, "up", 2, removeRival)
-          end)
-        end)
-      end)
-    end)
+    local Collision = require("src.core.game3.collision")
+    local function leave()
+      local y = tonumber(handle.cellY) or 0
+      local x = tonumber(handle.cellX) or playerX
+      if y <= 0 then
+        handle.hidden = true
+        handle.visible = false
+        return
+      end
+      if Collision.inBounds(x, y - 1) and Collision.isWalkable(x, y - 1) then
+        handle:scriptMove("up", 1, leave)
+      else
+        handle:scriptMove("left", 1, leave)
+      end
+    end
+    leave()
   end
 
   local function startRivalBattle(mapId, x, y)
@@ -442,7 +414,7 @@ return function(mod)
     local trainerId = RIVAL_TRAINERS[species]
     if not trainerId then return false end
 
-    local handle = spawnRival(mapId, x)
+    local handle, startY = spawnRival(mapId, x, y)
     if not handle then return false end
 
     encounterRunning = true
@@ -499,8 +471,8 @@ return function(mod)
       end
     end
 
-    move(handle, "down", 3, function()
-      handle:face("down")
+    move(handle, "up", math.max(0, startY - y), function()
+      handle:face("up")
       rivalDialog(
         "Hey, " .. playerName .. "!\\n" ..
         "Heading out already?\\n\\f" ..
@@ -519,22 +491,9 @@ return function(mod)
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
     local entered = tostring(ev.mapId)
-
-    if entered == "FR_PLAYERS_HOUSE_1F" then
-      if liveGame and (mod.save:get("firered_starter")
-          or (liveGame.save and liveGame.save.party and #liveGame.save.party > 0))
-          and not mod.save:get("firered_mom_gift_done") then
-        runMomEvent()
-      end
-    end
-
     if entered:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
-      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
-        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
-      end
-      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
-        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
-      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true) end
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false) end
     end
   end)
 
@@ -544,44 +503,30 @@ return function(mod)
   local Player = require("src.core.game3.player")
   local Collision = require("src.core.game3.collision")
   local Map = require("src.core.game3.map")
+  local SpaceMod = require("src.core.game3.scripting.space")
   local nativePlayerTryMove = Player.tryMove
   Player.tryMove = function(dir, game, run)
-    if liveGame and not momEventRunning and not encounterRunning
-        and dir == "up"
-        and (mod.save:get("firered_starter")
-          or (liveGame.save and liveGame.save.party and #liveGame.save.party > 0))
-        and mod.save:get("firered_mom_gift_done")
-        and not mod.save:get("firered_pallet_rival_done") then
-      local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
-      local ow = liveGame.overworld
-      local map = ow and ow.map
-      local north = map and map.connections and map.connections.north
-      if (mapId == "FR_PALLET_TOWN" or mapId == "PALLET_TOWN")
-          and north then
+    if liveGame and not momEventRunning and not encounterRunning and dir == "up"
+        and (mod.save:get("firered_starter") or (liveGame.save and liveGame.save.party and #liveGame.save.party > 0))
+        and mod.save:get("firered_mom_gift_done") and not mod.save:get("firered_pallet_rival_done") then
+      local mapId = tostring(Map.current or SpaceMod.mapId or "")
+      if mapId == "FR_PALLET_TOWN" then
         local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
-        if x and y then
-          local tx, ty = x, y - 1
-          if Collision.inBounds and not Collision.inBounds(tx, ty) then
-            if startRivalBattle(mapId, x, y) then
-              return "alternate_rival"
-            end
-          end
+        if x and y and not Collision.inBounds(x, y - 1) and startRivalBattle(mapId, x, y) then
+          return "blocked", "alternate_rival"
         end
       end
     end
     return nativePlayerTryMove(dir, game, run)
-  end)
+  end
 
   mod.hooks:wrap("core.update", function(next, game, dt)
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
-    if liveGame and not momEventRunning
-        and mapId == "FR_PLAYERS_HOUSE_1F"
-        and (mod.save:get("firered_starter")
-          or (liveGame.save and liveGame.save.party and #liveGame.save.party > 0))
-        and not mod.save:get("firered_mom_gift_done") then
-      if not Player.moving then
-        runMomEvent()
-      end
+    if liveGame and not momEventRunning and mapId == "FR_PLAYERS_HOUSE_1F"
+        and (mod.save:get("firered_starter") or (liveGame.save and liveGame.save.party and #liveGame.save.party > 0))
+        and not mod.save:get("firered_mom_gift_done") and not Player.moving
+        and Player.cellX == 8 and Player.cellY == 5 then
+      runMomEvent()
     end
     return next(game, dt)
   end)
