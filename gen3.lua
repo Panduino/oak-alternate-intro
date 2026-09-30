@@ -717,7 +717,8 @@ return function(mod)
       Message.show(itemText, {
         npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         done = function()
-          Audio.playFanfare(fanfare)
+          local song = Audio.songs()[fanfare] or fanfare
+          Audio.playFanfare(song)
           Message.show(explanation, {
             npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
             done = function()
@@ -1104,7 +1105,6 @@ return function(mod)
 
   Player.tryMove = function(dir, game, run)
     if liveGame
-        and dir == "down"
         and not momEventRunning
         and not encounterRunning
         and mod.save:get("firered_starter")
@@ -1112,12 +1112,20 @@ return function(mod)
       local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
       if (mapId == "PalletTown_PlayersHouse_1F"
           or mapId == "FR_PLAYERS_HOUSE_1F"
-          or mapId:find("PLAYERS_HOUSE_1F", 1, true))
-          and (Player.cellX == 4 or Player.cellX == 5
-            or Player.cellX == 3 or Player.cellX == 6)
-          and (Player.cellY == 7 or Player.cellY == 8) then
-        runMomEvent()
-        return "blocked", "alternate_mom"
+          or mapId:find("PLAYERS_HOUSE_1F", 1, true)) then
+        local dx, dy = 0, 0
+        if dir == "up" then dy = -1
+        elseif dir == "down" then dy = 1
+        elseif dir == "left" then dx = -1
+        elseif dir == "right" then dx = 1
+        end
+
+        local nx = tonumber(Player.cellX) + dx
+        local ny = tonumber(Player.cellY) + dy
+        if Collision.warpAt(nx, ny) then
+          runMomEvent()
+          return "blocked", "alternate_mom"
+        end
       end
     end
 
