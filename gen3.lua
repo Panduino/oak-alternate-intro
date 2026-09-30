@@ -456,13 +456,21 @@ return function(mod)
 
   function Scene.Task_AlternateOakPokedexWait(self, t)
     if self:printerActive() then return end
+
+    -- Finish the Pokédex speech by returning to the player picture,
+    -- then use the native FireRed ending text and exit animation.
     clearMessage()
-    showText(self, "Let's go!")
+    self:clearTrainerPic()
+    self:loadPlayerPic()
+    self.bg2X = 0
+    self.coordOffsetX = 0
+    self:createFadeOutTask(t, 2)
     t.func = Scene.Task_AlternateOakLetsGo
   end
 
   function Scene.Task_AlternateOakLetsGo(self, t)
-    if self:printerActive() then return end
+    if t.data.picFadeState == 0 then return end
+    self:oakPrint("lets_go")
     t.data.timer = 30
     t.func = originalOakSpeechFadeOutBGM
   end
@@ -980,7 +988,7 @@ return function(mod)
         and not mod.save:get("firered_mom_gift_done")
         and not Player.moving
         and Player.cellX == 10
-        and Player.cellY == 3 then
+        and Player.cellY == 2 then
       runMomEvent()
     end
 
