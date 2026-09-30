@@ -4,6 +4,7 @@ return function(mod)
   local Pokemon = require("src.core.game3.pokemon")
   local Party = require("src.core.game3.party")
   local FrlgFont = require("src.ui.game3.frlg_font")
+  local RomText = require("src.core.game3.rom_text")
   local Chrome = require("src.ui.game3.chrome")
   local Audio = require("src.core.game3.audio")
   local SE = require("src.core.game3.se_ids")
@@ -43,124 +44,60 @@ return function(mod)
   local encounterRunning = false
   local RIVAL_OBJECT_ID = 8
 
-  local ARROW_FRAMES = { 0, 1, 2, 1 }
-  local CURSOR_DELAY = 8
-
-  local function utf8Chars(s)
-    local out = {}
-    for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
-      out[#out + 1] = ch
-    end
-    return out
-  end
-
-  local function newOakPrinter(text, speed, canSpeedUp)
-    local p = {
-      pages = {}, page = 1, revealed = 0, tokens = {}, pos = 1,
-      active = true, state = "char", delay = 0,
-      canSpeedUp = canSpeedUp, arrowIdx = 0, arrowDelay = 0, arrowFrame = nil,
-    }
-
-    local pageText = ""
-    for _, ch in ipairs(utf8Chars(text)) do
-      if ch == "\f" then
-        p.pages[#p.pages + 1] = pageText
-        pageText = ""
-        p.tokens[#p.tokens + 1] = "P"
-      elseif ch == "\n" then
-        pageText = pageText .. ch
-        p.tokens[#p.tokens + 1] = "N"
-      else
-        pageText = pageText .. ch
-        p.tokens[#p.tokens + 1] = "C"
-      end
-    end
-    p.pages[#p.pages + 1] = pageText
-    p.tokens[#p.tokens + 1] = "E"
-
-    p.textSpeed = math.max(0, (tonumber(speed) or 1) - 1)
-
-    function p:run(newAB)
-      if not self.active then return end
-
-      -- A completes the current page. Text never advances by itself.
-      if self.state == "clear" then
-        if newAB then
-          Audio.playSe(SE.SE_SELECT)
-          if self.page < #self.pages then
-            self.page = self.page + 1
-            self.revealed = 0
-            self.arrowFrame = nil
-            self.arrowDelay = 0
-            self.state = "char"
-          else
-            self.active = false
-          end
-        end
-        return
-      end
-
-      -- Reveal characters according to the normal text speed, but never
-      -- consume the page-ending form-feed until A is pressed.
-      if self.delay > 0 then
-        self.delay = self.delay - 1
-        return
-      end
-
-      local tok = self.tokens[self.pos]
-      if tok == "P" then
-        self.pos = self.pos + 1
-        self.state = "clear"
-        self.arrowIdx, self.arrowDelay = 0, 0
-        self.arrowFrame = ARROW_FRAMES[1]
-        return
-      elseif tok == "E" or tok == nil then
-        -- The final page is still a real dialogue page: wait for A instead
-        -- of immediately handing control back to the scene task.
-        self.state = "clear"
-        self.arrowIdx, self.arrowDelay = 0, 0
-        self.arrowFrame = ARROW_FRAMES[1]
-        return
-      end
-
-      self.pos = self.pos + 1
-      self.revealed = self.revealed + 1
-      self.delay = self.textSpeed
-    end
-
-    function p:draw(x, y, opts)
-      local textPage = self.pages[self.page] or ""
-      local _, endX, endY = FrlgFont.draw(textPage, x, y, {
-        maxWidth = opts.maxWidth or 240,
-        limitChars = self.revealed,
-        colors = opts.colors or FrlgFont.COLOR.NORMAL,
-        linePitch = opts.linePitch,
-      })
-      if self.state == "clear" then
-        if self.arrowDelay > 0 then
-          self.arrowDelay = self.arrowDelay - 1
-        else
-          self.arrowFrame = ARROW_FRAMES[self.arrowIdx + 1]
-          self.arrowIdx = (self.arrowIdx + 1) % #ARROW_FRAMES
-          self.arrowDelay = CURSOR_DELAY
-        end
-        if endX then Chrome.promptArrow(endX, endY, self.arrowFrame) end
-      end
-    end
-
-    return p
-  end
+  -- Reuse the engine's working FireRed Oak printer instead of maintaining
+  -- a second text implementation.  We temporarily replace RomText.ascii so
+  -- Scene:oakPrint builds its normal native printer from our literal text.
+  local nativeOakPrint = Scene.oakPrint
 
   local function rawPrint(scene, text)
     text = tostring(text or "")
-    text = text:gsub("\\f", "\f")
-    text = text:gsub("\\n", "\n")
-    text = text:gsub("\\p", "\f")
-    text = text:gsub("\\l", "\n")
+    text = text:gsub("\\\\f", "\\f")
+    text = text:gsub("\\\\n", "\\n")
+    text = text:gsub("\\\\p", "\\f")
+    text = text:gsub("\\\\l", "\\n")
     text = text:gsub("{PLAYER}", scene.playerName or "RED")
-    scene.win.dialog = true
-    scene.printer = newOakPrinter(text, scene.textSpeed, true)
+
+    local oldAscii = RomText.ascii
+    RomText.ascii = function()
+      return text
+    end
+
+    local ok, err = pcall(nativeOakPrint, scene, "lets_go")
+    RomText.ascii = oldAscii
+    if not ok then error(err, 0) end
+
+    -- Native FireRed normally closes the final page at EOS.  For this intro
+    -- every page, including the last one, must wait for A before the scene
+    -- advances.  Keep the native renderer/arrow and only intercept EOS.
+    local printer = scene.printer
+    if printer and not printer._alternateFinalWait then
+      local nativeRender = printer.render
+      printer.render = function(p, newAB, heldAB)
+        if p._alternateFinalWait then
+          if newAB then
+            p._alternateFinalWait = false
+            p.active = false
+            return "finish"
+          end
+          nativeRender(p, false, heldAB)
+          return "update"
+        end
+
+        local result = nativeRender(p, newAB, heldAB)
+        if result == "finish" then
+          p._alternateFinalWait = true
+          p.active = true
+          p.state = "clear"
+          p.arrowIdx = 0
+          p.arrowDelay = 0
+          p.arrowFrame = nil
+          return "update"
+        end
+        return result
+      end
+    end
   end
+
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
   end
@@ -462,24 +399,25 @@ return function(mod)
   function Scene.Task_AlternateOakPokedexText(self, t)
     if t.data.picFadeState == 0 then return end
     if self.pic then self.pic.hidden = false end
-    if self:printerActive() then return end
 
-    if t.data.page == nil then
-      t.data.page = 1
+    if t.data.started ~= true then
+      t.data.started = true
       rawPrint(self,
-        "I have a request for you.\f" ..
-        "I want you to help me with\nmy research.\f" ..
-        "I've given you an invention\nof mine, the POKéDEX!\f" ..
-        "It automatically records\ndata on POKéMON you've\nseen or caught!\f" ..
-        "It's a hi-tech encyclopedia!\f" ..
-        "Take this with you, {PLAYER}!\f" ..
-        "It will help you on your journey.\f" ..
-        "To make a complete guide on\nall the POKéMON in the world...\f" ..
-        "That was my dream! But, I'm too\nold! I can't do it!\f" ..
-        "So, I want you to fulfill my\ndream for me!\f" ..
-        "Get moving! This is a great\nundertaking in POKéMON history!")
+        "I have a request for you.\\f" ..
+        "I want you to help me with\\nmy research.\\f" ..
+        "I've given you an invention\\nof mine, the POKéDEX!\\f" ..
+        "It automatically records\\ndata on POKéMON you've\\nseen or caught!\\f" ..
+        "It's a hi-tech encyclopedia!\\f" ..
+        "Take this with you, {PLAYER}!\\f" ..
+        "It will help you on your journey.\\f" ..
+        "To make a complete guide on\\nall the POKéMON in the world...\\f" ..
+        "That was my dream! But, I'm too\\nold! I can't do it!\\f" ..
+        "So, I want you to fulfill my\\ndream for me!\\f" ..
+        "Get moving! This is a great\\nundertaking in POKéMON history!")
       return
     end
+
+    if self:printerActive() then return end
 
     self:clearDialog()
     self:createFadeInTask(t, 2)
@@ -511,6 +449,7 @@ return function(mod)
     session.vars[0x4031] = row.index
     session.vars[0x4050] = 3
     session.vars[0x4051] = 2 -- Viridian tutorial old man already completed
+    session.vars[0x4070] = 2 -- Pallet Trainer Tips girl already completed
     session.vars[0x4055] = 6
     session.vars[0x4057] = 2
     session.vars[0x4058] = 2
@@ -908,16 +847,21 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     if not ev.mapId then return end
-    if tostring(ev.mapId) == "FR_PALLET_TOWN"
-        and mod.save:get("firered_starter") then
-      -- Remove the vanilla Trainer Tips sign girl from the alternate route.
-      local Objects = require("src.core.game3.objects")
-      Objects.removeObject(1)
-    end
     if tostring(ev.mapId) == "FR_PLAYERS_HOUSE_1F"
         and mod.save:get("firered_starter")
         and not mod.save:get("firered_mom_gift_done") then
       runMomEvent()
+    end
+    if tostring(ev.mapId):find("PALLET_TOWN", 1, true)
+        and not tostring(ev.mapId):find("PROFESSOR_OAKS_LAB", 1, true)
+        and mod.save:get("firered_starter")
+        and mod.save:get("firered_mom_gift_done")
+        and not mod.save:get("firered_pallet_rival_done") then
+      local Player = require("src.core.game3.player")
+      local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
+      if (x == 12 or x == 13) and y <= 2 then
+        startRivalBattle(tostring(ev.mapId), x, y)
+      end
     end
     if tostring(ev.mapId):find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
@@ -944,7 +888,7 @@ return function(mod)
     if not mod.save:get("firered_mom_gift_done") then return end
 
     local x, y = tonumber(ev.x), tonumber(ev.y)
-    if y ~= 1 or (x ~= 12 and x ~= 13) then return end
+    if (x ~= 12 and x ~= 13) or y > 2 then return end
     startRivalBattle(mapId, x, y)
   end)
 end
