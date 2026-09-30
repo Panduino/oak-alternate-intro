@@ -6,7 +6,7 @@
   "entry": "main.lua",
   "profile": "content",
   "category": "GAMEPLAY",
-  "games": ["gen1"],
+  "games": ["gen1", "gen3"],
   "game_version": ">=0.0.0-0 <2.0.0",
   "priority": 80,
   "dependencies": [],
