@@ -113,12 +113,35 @@ return function(mod)
     end
 
     function printer:draw(x, y, opts)
-      FrlgFont.draw(self.pages[self.page] or "", x, y, {
+      local pageText = self.pages[self.page] or ""
+      FrlgFont.draw(pageText, x, y, {
         maxWidth = opts.maxWidth,
         colors = opts.colors or FrlgFont.COLOR.NORMAL,
         linePitch = FrlgFont.LINE_PITCH,
         limitChars = self.revealed,
       })
+
+      -- FireRed displays its red continuation arrow when the current
+      -- dialogue page has finished printing and another page follows.
+      -- Do not show it on the final page (including pages that lead into
+      -- a question/menu).
+      if self.waiting and self.page < #self.pages then
+        local lineCount = 1
+        for _ in pageText:gmatch("\\n") do
+          lineCount = lineCount + 1
+        end
+
+        local arrowX = x + (opts.maxWidth or 200) - 8
+        local arrowY = y + lineCount * FrlgFont.LINE_PITCH + 2
+        love.graphics.setColor(1, 0, 0, 1)
+        love.graphics.polygon(
+          "fill",
+          arrowX - 4, arrowY - 3,
+          arrowX + 4, arrowY - 3,
+          arrowX, arrowY + 3
+        )
+        love.graphics.setColor(1, 1, 1, 1)
+      end
     end
 
     scene.win.dialog = true
