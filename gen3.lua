@@ -526,6 +526,7 @@ return function(mod)
     local handle = mod.world:npc(mapId, RIVAL_OBJECT_ID)
     if not handle then
       Objects.removeObject(RIVAL_OBJECT_ID)
+      setFlag("FLAG_HIDE_OAK_IN_PALLET_TOWN", true)
       return nil
     end
 
@@ -535,6 +536,7 @@ return function(mod)
     handle:placeAt(10, 8, "up")
     if not handle:setAppearance("SPRITE_BLUE") then
       Objects.removeObject(RIVAL_OBJECT_ID)
+      setFlag("FLAG_HIDE_OAK_IN_PALLET_TOWN", true)
       return nil
     end
 
