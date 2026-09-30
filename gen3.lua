@@ -1172,20 +1172,11 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        if x and y then
-          -- Player.tryMove normally hands an out-of-bounds north step to
-          -- Collision.tryConnection, which is what moves Pallet Town -> Route 1.
-          -- Intercept that exact case before the connection can happen.
-          local canEnter, why = Collision.canEnter(liveGame, x, y - 1, {
-            fromX = x,
-            fromY = y,
-            dir = dir,
-            elevation = Player.currentElevation,
-          })
-          if not canEnter and why == "bounds" then
-            if startRivalBattle(x, y) then
-              return "blocked", "alternate_rival"
-            end
+        if x and y and not Collision.inBounds(x, y - 1) then
+          -- This is the Pallet Town tile immediately before the Route 1
+          -- connection. Stop the player here, while they are still in town.
+          if startRivalBattle(x, y) then
+            return "blocked", "alternate_rival"
           end
         end
       end
