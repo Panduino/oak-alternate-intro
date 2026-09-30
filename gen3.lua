@@ -597,10 +597,27 @@ return function(mod)
     Field.lock("alternate_oak_mom")
 
     local function finish()
-      handle:scriptMove("up", 1, function()
+      local function faceHome()
         handle:face("left")
         momDone()
-      end)
+      end
+
+      local x = tonumber(handle.cellX) or 8
+      local y = tonumber(handle.cellY) or 4
+      local function moveHome()
+        if x < 8 then
+          handle:scriptMove("right", 1, moveHome)
+        elseif x > 8 then
+          handle:scriptMove("left", 1, moveHome)
+        elseif y < 4 then
+          handle:scriptMove("down", 1, moveHome)
+        elseif y > 4 then
+          handle:scriptMove("up", 1, moveHome)
+        else
+          faceHome()
+        end
+      end
+      moveHome()
     end
 
     local function giveShoes()
@@ -630,22 +647,56 @@ return function(mod)
       Bag.add(session.bag, 4, 10)
       Audio.playFanfare("MUS_OBTAIN_ITEM")
       Message.show(
-        playerName(liveGame) .. " got 10 POKé BALLs!\\f" ..
+        playerName(liveGame) .. " got 10 POKé BALLs!\f" ..
         "They're useful for catching wild POKéMON.",
         { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveMap }
       )
     end
 
-    handle:scriptMove("down", 1, function()
-      handle:face("down")
-      Message.show(
-        "Right. All kids leave home someday.\\n" ..
-        "It said so on TV.\\f" ..
-        "I packed your things for your journey.\\n" ..
-        "I even packed some fresh underwear.",
-        { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveBalls }
-      )
-    end)
+    local function talk()
+      local px = tonumber(Player.cellX) or 10
+      local py = tonumber(Player.cellY) or 3
+      local mx = tonumber(handle.cellX) or 8
+      local my = tonumber(handle.cellY) or 4
+
+      local function facePlayer()
+        if px < mx then handle:face("left")
+        elseif px > mx then handle:face("right")
+        elseif py < my then handle:face("up")
+        else handle:face("down") end
+
+        Message.show(
+          "Right. All kids leave home someday.\\n" ..
+          "It said so on TV.\\f" ..
+          "I packed your things for your journey.\\n" ..
+          "I even packed some fresh underwear.",
+          { npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE, done = giveBalls }
+        )
+      end
+
+      local function moveToPlayer()
+        mx = tonumber(handle.cellX) or mx
+        my = tonumber(handle.cellY) or my
+        if mx < px then
+          handle:scriptMove("right", 1, moveToPlayer)
+        elseif mx > px then
+          handle:scriptMove("left", 1, moveToPlayer)
+        elseif my < py then
+          handle:scriptMove("down", 1, moveToPlayer)
+        elseif my > py then
+          handle:scriptMove("up", 1, moveToPlayer)
+        else
+          facePlayer()
+        end
+      end
+
+      moveToPlayer()
+    end
+
+    -- The vanilla stairs arrive at (10, 2). Trigger as the player steps
+    -- onto the floor at the bottom of them, then keep the player locked
+    -- while Mom walks over and handles the entire gift sequence.
+    talk()
   end
 
   --------------------------------------------------------------------------
@@ -928,8 +979,8 @@ return function(mod)
         and mod.save:get("firered_starter")
         and not mod.save:get("firered_mom_gift_done")
         and not Player.moving
-        and Player.cellX == 8
-        and Player.cellY == 5 then
+        and Player.cellX == 10
+        and Player.cellY == 3 then
       runMomEvent()
     end
 
