@@ -502,6 +502,17 @@ return function(mod)
   local function removeRival()
     if activeRival then
       local Objects = require("src.core.game3.objects")
+      for _, lid in ipairs(Objects._order or {}) do
+        local eo = Objects._byId[lid]
+        local name = eo and eo.def and tostring(eo.def.name or ""):upper() or ""
+        if name:find("OAK", 1, true) then
+          eo.hidden = false
+          eo.visible = true
+          eo.invisible = false
+          if eo.def then eo.def.hidden = false end
+        end
+      end
+      if Objects.refreshGraphics then Objects.refreshGraphics() end
       Objects.removeObject(activeRival)
       activeRival = nil
     end
