@@ -1167,14 +1167,13 @@ return function(mod)
         and not mod.save:get("firered_pallet_rival_done") then
 
       local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
-      if mapId:find("PALLET_TOWN", 1, true)
-          and not mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
+      if mapId == "FR_PALLET_TOWN" or mapId == "PalletTown" then
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        if x and y and not Collision.inBounds(x, y - 1) then
-          -- This is the Pallet Town tile immediately before the Route 1
-          -- connection. Stop the player here, while they are still in town.
+        -- Stop the first northward exit attempt on either of the two
+        -- rows immediately before the north edge of Pallet Town.
+        if x and y and (y == 1 or y == 2) then
           if startRivalBattle(x, y) then
             return "blocked", "alternate_rival"
           end
