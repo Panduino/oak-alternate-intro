@@ -874,15 +874,18 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
       end
-      -- FireRed's post-Pokédex lab state is scene 6. Oak is local
-      -- object 4; the two Pokédex props are local objects 9 and 10.
-      -- Explicitly restore that native state because the alternate intro
-      -- never runs FireRed's normal scene-6 cleanup script.
+      -- FireRed's post-Pokédex lab state is scene 6. Let the normal
+      -- contextual object resolver handle the scene's object positions and
+      -- props. Explicitly clear Oak's hide flag and resync that flag so Oak
+      -- is present even if the map was entered with a stale object cache.
       local Objects = require("src.core.game3.objects")
       setVar("VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB", 6)
-      Objects.showObject(4)
-      Objects.removeObject(9)
-      Objects.removeObject(10)
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+        if Objects.syncFlagVisibility then
+          Objects.syncFlagVisibility(Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false, true)
+        end
+      end
       if Objects.refreshVisibility then Objects.refreshVisibility() end
       if Objects.refreshGraphics then Objects.refreshGraphics() end
 
@@ -891,11 +894,37 @@ return function(mod)
     end
   end)
 
-  -- FireRed's actual Pallet Town trigger is an on-frame coordinate
-  -- trigger at (12,1) and (13,1), before the north connection to Route 1.
-  -- Poll that exact in-town trigger tile before the engine processes the
-  -- next movement frame. This avoids relying on movement.collision, which
-  -- is not the vanilla coordinate-trigger seam for an edge connection.
+  -- FireRed handles the Pallet Town stop as a movement/coordinate script,
+  -- before the north connection is allowed to transition to Route 1.
+  -- Intercept the actual attempted step instead of polling after the step:
+  -- by then the connection warp has already happened.
+  local Player = require("src.core.game3.player")
+  local nativePlayerTryMove = Player.tryMove
+  Player.tryMove = function(dir, game, run)
+    if liveGame and not encounterRunning
+        and dir == "up"
+        and Player.facing == "up"
+        and mod.save:get("firered_starter")
+        and mod.save:get("firered_mom_gift_done")
+        and not mod.save:get("firered_pallet_rival_done") then
+      local ow = liveGame.overworld
+      local map = ow and ow.map
+      local mapId = map and tostring(map.id or "") or ""
+      -- The FireRed Pallet Town default script fires when the player
+      -- attempts to step onto the northern row (y == 1). On this map the
+      -- player is standing on y == 2 immediately before that step.
+      if mapId == "FR_PALLET_TOWN" or mapId == "PALLET_TOWN" then
+        local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
+        if y == 2 then
+          if startRivalBattle(mapId, x, y) then
+            return "alternate_rival"
+          end
+        end
+      end
+    end
+    return nativePlayerTryMove(dir, game, run)
+  end)
+
   mod.hooks:wrap("core.update", function(next, game, dt)
     local ow = liveGame and liveGame.overworld
     local map = ow and ow.map
@@ -911,19 +940,6 @@ return function(mod)
       end
     end
 
-    if liveGame and not encounterRunning
-        and mod.save:get("firered_starter")
-        and mod.save:get("firered_mom_gift_done")
-        and not mod.save:get("firered_pallet_rival_done") then
-      local Player = require("src.core.game3.player")
-      local x, y = tonumber(Player.cellX), tonumber(Player.cellY)
-      if (mapId == "FR_PALLET_TOWN" or mapId == "PALLET_TOWN")
-          and (x == 12 or x == 13)
-          and y == 1
-          and Player.facing == "up" then
-        startRivalBattle("PALLET_TOWN", x, y)
-      end
-    end
     return next(game, dt)
   end)
 end
