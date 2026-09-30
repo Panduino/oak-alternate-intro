@@ -406,7 +406,8 @@ return function(mod)
         "I have a request for you.\\f" ..
         "I want you to help me with\\nmy research.\\f" ..
         "I've given you an invention\\nof mine, the POKéDEX!\\f" ..
-        "It automatically records\\ndata on POKéMON you've\\nseen or caught!\\f" ..
+        "It automatically records\\ndata on POKéMON\\f" ..
+        "you've seen or caught!\\f" ..
         "It's a hi-tech encyclopedia!\\f" ..
         "Take this with you, {PLAYER}!\\f" ..
         "It will help you on your journey.\\f" ..
@@ -529,9 +530,26 @@ return function(mod)
     }
 
     Objects._defs = Objects._defs or {}
+
+    -- Replace any previous runtime template for this reserved local id.
+    -- Do not leave duplicate localId 8 templates in the live map definition.
+    for i = #Objects._defs, 1, -1 do
+      local oldDef = Objects._defs[i]
+      if tonumber(oldDef and (oldDef.localId or oldDef.index)) == RIVAL_OBJECT_ID then
+        table.remove(Objects._defs, i)
+      end
+    end
+
     local existing = Objects._byId and Objects._byId[RIVAL_OBJECT_ID]
     if existing then
-      Objects.removeObject(RIVAL_OBJECT_ID)
+      existing.hidden = true
+      existing.visible = false
+      Objects._byId[RIVAL_OBJECT_ID] = nil
+      for i = #Objects._order, 1, -1 do
+        if Objects._order[i] == RIVAL_OBJECT_ID then
+          table.remove(Objects._order, i)
+        end
+      end
     end
 
     Objects._defs[#Objects._defs + 1] = def
@@ -713,7 +731,8 @@ return function(mod)
 
     -- Start from the south road, not from the Rival's house. The pathfinder
     -- keeps every step on an actually walkable cell.
-    pathBetween(handle, x, 2, function(ok)
+    local approachY = math.min(y + 1, 19)
+    pathBetween(handle, x, approachY, function(ok)
       if not ok then
         removeRival()
         encounterRunning = false
@@ -880,19 +899,52 @@ return function(mod)
     end
   end)
 
-  mod.events:on("world.stepped", function(ev)
-    if encounterRunning or mod.save:get("firered_pallet_rival_done") then return end
-    if not liveGame or not ev.mapId then return end
-    local mapId = tostring(ev.mapId)
+  -- Intercept the movement BEFORE the player enters the Rival trigger cell.
+  -- This makes the encounter a real stop: running cannot carry the player
+  -- through the trigger before the field lock is installed.
+  mod.hooks:wrap("movement.collision", function(next, allowed, ctx)
+    if not allowed or encounterRunning
+        or mod.save:get("firered_pallet_rival_done") then
+      return next(allowed, ctx)
+    end
+
+    local mover = ctx and ctx.mover
+    local isPlayer = mover and (
+      mover.localId == 0xFF
+      or mover.localId == 255
+      or mover == package.loaded["src.core.game3.player"]
+    )
+    if not isPlayer or not liveGame or not ctx.toX or not ctx.toY then
+      return next(allowed, ctx)
+    end
+
+    local mapId = tostring(ctx.map and ctx.map.id
+      or liveGame.save.map
+      or liveGame.save.mapId
+      or "")
     if not mapId:find("PALLET_TOWN", 1, true)
         or mapId:find("PROFESSOR_OAKS_LAB", 1, true) then
-      return
+      return next(allowed, ctx)
     end
-    if not mod.save:get("firered_starter") then return end
-    if not mod.save:get("firered_mom_gift_done") then return end
+    if not mod.save:get("firered_starter")
+        or not mod.save:get("firered_mom_gift_done") then
+      return next(allowed, ctx)
+    end
 
-    local x, y = tonumber(ev.x), tonumber(ev.y)
-    if (x ~= 12 and x ~= 13) or y > 2 then return end
-    startRivalBattle(mapId, x, y)
+    local tx, ty = tonumber(ctx.toX), tonumber(ctx.toY)
+    if (tx ~= 12 and tx ~= 13) or ty > 2 then
+      return next(allowed, ctx)
+    end
+
+    local fromX, fromY = tonumber(ctx.fromX), tonumber(ctx.fromY)
+    if not fromX or not fromY then
+      return next(allowed, ctx)
+    end
+
+    if startRivalBattle(mapId, fromX, fromY) then
+      return false
+    end
+
+    return next(allowed, ctx)
   end)
 end
