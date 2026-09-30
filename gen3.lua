@@ -42,7 +42,7 @@ return function(mod)
   local liveGame
   local activeRival
   local encounterRunning = false
-  local RIVAL_OBJECT_ID = 8
+  local RIVAL_OBJECT_ID = 3
 
   -- Reuse the engine's working FireRed Oak printer instead of maintaining
   -- a second text implementation.  We temporarily replace RomText.ascii so
