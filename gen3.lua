@@ -906,4 +906,4 @@ return function(mod)
     startRivalBattle("PALLET_TOWN", fromX, fromY)
     return false
   end)
-endend
+end
