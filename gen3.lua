@@ -696,8 +696,13 @@ return function(mod)
     -- Preserve the movement sequence from the last known working
     -- implementation. It is deliberately kept separate from spawning so
     -- the appearance change cannot affect the encounter flow.
-    move(handle, "up", 6, function()
-      move(handle, "left", 15 - x, function()
+    pathBetween(handle, x, 2, function(ok)
+      if not ok then
+        removeRival()
+        encounterRunning = false
+        require("src.core.game3.field").unlock("alternate_oak_rival")
+        return
+      end
         handle:face("up")
         rivalDialog(
           playerName .. "! You're finally out! You overslept, didn't you?\\f" ..
@@ -706,7 +711,6 @@ return function(mod)
           beginBattle
         )
       end)
-    end)
 
     return true
   end
