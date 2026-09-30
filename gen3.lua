@@ -717,7 +717,7 @@ return function(mod)
       Message.show(itemText, {
         npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
         done = function()
-          local song = Audio.songs()[fanfare] or fanfare
+          local song = fanfare
           Audio.playFanfare(song)
           Message.show(explanation, {
             npcColor = FrlgFont.NPC_TEXT_COLOR.FEMALE,
