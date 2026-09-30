@@ -137,6 +137,22 @@ return function(mod)
   -- the native LetsGo text is never printed.
   --------------------------------------------------------------------------
 
+  local originalSceneFrame = Scene.frame
+  Scene.frame = function(self)
+    local alternateMessageWasOpen = Message.isOpen()
+    originalSceneFrame(self)
+
+    -- The new-game scene normally advances its native printer itself.
+    -- Message.lua is a field-message system, so it is not ticked by the
+    -- new-game scene. Pump it here while our alternate intro is active.
+    if self._alternateOakIntroActive then
+      Message.tick()
+      if alternateMessageWasOpen and (self.input.a or self.input.b) then
+        Message.advance()
+      end
+    end
+  end
+
   local originalOakSpeechReshowPlayersPic = Scene.Task_OakSpeech_ReshowPlayersPic
   local originalOakSpeechFadeOutBGM = Scene.Task_OakSpeech_FadeOutBGM
 
@@ -163,6 +179,7 @@ return function(mod)
   end
 
   function Scene.Task_AlternateOakStarterIntro(self, t)
+    self._alternateOakIntroActive = true
     if self:fadeActive() then return end
 
     self._alternateStarterSpecies = self._alternateStarterSpecies or STARTERS[1].species
@@ -332,6 +349,7 @@ return function(mod)
   function Scene.Task_AlternateOakPokedexWait(self, t)
     if Message.isOpen() then return end
     clearMessage()
+    self._alternateOakIntroActive = false
     t.data.timer = 0
     t.func = originalOakSpeechFadeOutBGM
   end
