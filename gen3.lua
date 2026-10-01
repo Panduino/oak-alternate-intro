@@ -1181,6 +1181,9 @@ return function(mod)
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
       end
+      if Flags.IDS.FLAG_HIDE_POKEDEX then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_POKEDEX, true)
+      end
       local species = tonumber(mod.save:get("firered_starter"))
       local taken = { [species] = true }
       if species == 1 then taken[4] = true
@@ -1299,6 +1302,9 @@ return function(mod)
       end
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      if Flags.IDS.FLAG_HIDE_POKEDEX then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_POKEDEX, true)
       end
       local species = tonumber(mod.save:get("firered_starter"))
       local taken = { [species] = true }
