@@ -1141,7 +1141,7 @@ return function(mod)
       else
         Player.facing = py > ry and "down" or "up"
       end
-      Objects.scriptFace(handle, "face_player")
+      Objects.facePlayer(handle.localId)
       Message.show(
         name .. "! You're finally out!\\n" ..
         "You overslept, didn't you?\\f" ..
