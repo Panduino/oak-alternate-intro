@@ -995,46 +995,58 @@ return function(mod)
       Field.unlock("alternate_oak_rival")
     end
 
-    local function step()
-      if not handle or handle.hidden then return end
+    local function findRoutePath()
+      if not handle or handle.hidden then return nil end
+      local sx = tonumber(handle.cellX) or playerX
+      local sy = tonumber(handle.cellY) or 0
+      local px = tonumber(Player.cellX) or playerX
+      local py = tonumber(Player.cellY) or 0
 
-      local x = tonumber(handle.cellX) or playerX
-      local y = tonumber(handle.cellY) or 0
+      local queue = { { x = sx, y = sy, path = {} } }
+      local seen = { [sx .. ":" .. sy] = true }
+      local dirs = {
+        { dx = 0, dy = -1, dir = "up" },
+        { dx = 0, dy = 1, dir = "down" },
+        { dx = -1, dy = 0, dir = "left" },
+        { dx = 1, dy = 0, dir = "right" },
+      }
 
-      -- Walk around the player rather than trying to occupy their tile.
-      if y > 0 and Collision.inBounds(x, y - 1)
-          and Collision.isWalkable(x, y - 1)
-          and not Objects.at(x, y - 1) then
-        Objects.startTrack(handle.localId, { { kind = "step", dir = "up" } }, step)
-        return
-      end
+      local head = 1
+      while head <= #queue do
+        local node = queue[head]
+        head = head + 1
+        if node.y == 0 then return node.path end
 
-      for _, dir in ipairs({ "left", "right" }) do
-        local dx = dir == "left" and -1 or 1
-        if Collision.inBounds(x + dx, y)
-            and Collision.isWalkable(x + dx, y)
-            and not Objects.at(x + dx, y) then
-          Objects.startTrack(handle.localId, { { kind = "step", dir = dir } }, function()
-            local nx = tonumber(handle.cellX) or x
-            local ny = tonumber(handle.cellY) or y
-            if ny == 0 then
-              hideAtRouteEntrance()
-            else
-              rivalLeave(handle, nx)
-            end
-          end)
-          return
+        for _, d in ipairs(dirs) do
+          local nx, ny = node.x + d.dx, node.y + d.dy
+          local key = nx .. ":" .. ny
+          if not seen[key]
+              and Collision.inBounds(nx, ny)
+              and Collision.isWalkable(nx, ny)
+              and not (nx == px and ny == py)
+              and not Objects.at(nx, ny) then
+            seen[key] = true
+            local path = {}
+            for i, step in ipairs(node.path) do path[i] = step end
+            path[#path + 1] = d.dir
+            queue[#queue + 1] = { x = nx, y = ny, path = path }
+          end
         end
       end
-
-      if y == 0 then
-        hideAtRouteEntrance()
-      else
-        hideAtRouteEntrance()
-      end
+      return nil
     end
 
-    step()
+    local path = findRoutePath()
+    if not path or #path == 0 then
+      hideAtRouteEntrance()
+      return
+    end
+
+    local steps = {}
+    for _, dir in ipairs(path) do
+      steps[#steps + 1] = { kind = "step", dir = dir }
+    end
+    Objects.startTrack(handle.localId, steps, hideAtRouteEntrance)
   end
 
   local function startRivalBattle(x, y)
@@ -1115,7 +1127,7 @@ return function(mod)
     moveSteps(handle, "up", math.max(0, startY - y - 1), function()
       Objects.scriptFace(handle, "up")
       Message.show(
-        rival .. "! You're finally out!\\n" ..
+        name .. "! You're finally out!\\n" ..
         "You overslept, didn't you?\\f" ..
         "I'll take you on!",
         {
