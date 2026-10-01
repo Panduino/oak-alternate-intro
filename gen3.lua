@@ -900,7 +900,7 @@ return function(mod)
   -- Pallet Town does not have the normal Rival object in its map object list.
   -- Build one from the same Rival graphics used by FireRed and add it only
   -- when the encounter starts.
-  local RIVAL_OBJECT_ID = 8
+  local RIVAL_OBJECT_ID = 250
 
   local function ensureRivalObject(x, y)
     local handle = Objects.find(RIVAL_OBJECT_ID)
@@ -1273,16 +1273,11 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        -- Intercept the Route 1 warp before the native warp can fire.
-        if x and y then
-          local exitWarp = Collision.warpAt(x, y - 1)
-          local exitsToRoute1 = exitWarp
-            and tostring(exitWarp.destMap or ""):find("ROUTE_1", 1, true)
-          local knownNorthExit = y == 2 and (x == 12 or x == 13)
-          if exitsToRoute1 or knownNorthExit then
-            if startRivalBattle(x, y) then
-              return "blocked", "alternate_rival"
-            end
+        -- Trigger one row before the Route 1 exit, so the event
+        -- starts safely inside Pallet Town instead of at the seam.
+        if x and y and y == 2 and (x == 12 or x == 13) then
+          if startRivalBattle(x, y) then
+            return "blocked", "alternate_rival"
           end
         end
       end
