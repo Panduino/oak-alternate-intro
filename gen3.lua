@@ -895,6 +895,36 @@ return function(mod)
   -- Rival
   --------------------------------------------------------------------------
 
+  -- Pallet Town does not have the normal Rival object in its map object list.
+  -- Build one from the same Rival graphics used by FireRed and add it only
+  -- when the encounter starts.
+  local RIVAL_OBJECT_ID = 250
+
+  local function ensureRivalObject(x, y)
+    local handle = Objects.find(RIVAL_OBJECT_ID)
+    if handle then return handle end
+
+    if type(Objects._defs) ~= "table" then return nil end
+    for _, def in ipairs(Objects._defs) do
+      if tonumber(def.localId or def.index) == RIVAL_OBJECT_ID then
+        Objects.addObject(RIVAL_OBJECT_ID)
+        return Objects.find(RIVAL_OBJECT_ID)
+      end
+    end
+
+    Objects._defs[#Objects._defs + 1] = {
+      localId = RIVAL_OBJECT_ID,
+      graphicsId = 72,
+      x = x,
+      y = y,
+      movementType = 8,
+      elevation = 3,
+      passable = false,
+    }
+    Objects.addObject(RIVAL_OBJECT_ID)
+    return Objects.find(RIVAL_OBJECT_ID)
+  end
+
   local function hideRival(handle)
     if not handle then return end
     handle.hidden = true
@@ -922,7 +952,7 @@ return function(mod)
   end
 
   local function spawnRival(x, playerY)
-    local handle = Objects.find(8)
+    local handle = ensureRivalObject(x, playerY)
     if not handle then return nil end
 
     -- The player is stopped on the north edge of Pallet Town. Put Rival
@@ -1127,6 +1157,64 @@ return function(mod)
   end)
 
   --------------------------------------------------------------------------
+  -- Pallet Town exit / Rival interception
+  --------------------------------------------------------------------------
+
+  local nativePlayerTryMove = Player.tryMove
+
+  Player.tryMove = function(dir, game, run)
+    if liveGame
+        and not momEventRunning
+        and not encounterRunning
+        and mod.save:get("firered_starter")
+        and not mod.save:get("firered_mom_gift_done") then
+      local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
+      if (mapId == "PalletTown_PlayersHouse_1F"
+          or mapId == "FR_PLAYERS_HOUSE_1F"
+          or mapId:find("PLAYERS_HOUSE_1F", 1, true)) then
+        local dx, dy = 0, 0
+        if dir == "up" then dy = -1
+        elseif dir == "down" then dy = 1
+        elseif dir == "left" then dx = -1
+        elseif dir == "right" then dx = 1
+        end
+
+        local nx = tonumber(Player.cellX) + dx
+        local ny = tonumber(Player.cellY) + dy
+        if Collision.warpAt(nx, ny) then
+          runMomEvent()
+          return "blocked", "alternate_mom"
+        end
+      end
+    end
+
+    if liveGame
+        and dir == "up"
+        and not momEventRunning
+        and not encounterRunning
+        and mod.save:get("firered_starter")
+        and mod.save:get("firered_mom_gift_done")
+        and not mod.save:get("firered_pallet_rival_done") then
+
+      local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
+      if mapId == "FR_PALLET_TOWN" or mapId == "PalletTown" then
+        local x = tonumber(Player.cellX)
+        local y = tonumber(Player.cellY)
+
+        -- Trigger one row before the Route 1 exit, so the event
+        -- starts safely inside Pallet Town instead of at the seam.
+        if x and y and y == 2 and (x == 12 or x == 13) then
+          if startRivalBattle(x, y) then
+            return "blocked", "alternate_rival"
+          end
+        end
+      end
+    end
+
+    return nativePlayerTryMove(dir, game, run)
+  end
+
+  --------------------------------------------------------------------------
   -- Pallet Town Rival trigger
   --------------------------------------------------------------------------
 
@@ -1146,8 +1234,6 @@ return function(mod)
     local y = tonumber(ev.y)
     if not x or not y then return end
 
-    -- These are the two tiles immediately below the Route 1 exit tiles.
-    -- Start the event after landing here, before the player can reach the seam.
     if y == 2 and (x == 12 or x == 13) then
       startRivalBattle(x, y)
     end
