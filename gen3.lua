@@ -49,6 +49,7 @@ return function(mod)
   local liveGame
   local momEventRunning = false
   local encounterRunning = false
+  local rivalPlayerFacing = nil
 
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -1093,6 +1094,7 @@ return function(mod)
     foe.party[1].moves = RIVAL_MOVES[species]
 
     local function beginBattle()
+      rivalPlayerFacing = nil
       local ok = BattleBridge.start(mod, liveGame, foe, {
         trainerId = trainerId,
         trainerName = rival,
@@ -1140,7 +1142,10 @@ return function(mod)
       else
         playerDir = py > ry and "down" or "up"
       end
-      Player.scriptFace(playerDir)
+      Player.facing = playerDir
+      Player.moveDir = playerDir
+      Player.turnArmed = true
+      rivalPlayerFacing = playerDir
       Objects.facePlayer(handle.localId)
       Message.show(
         name .. "! You're finally out!\\n" ..
@@ -1309,6 +1314,11 @@ return function(mod)
     local result = next(game, dt)
 
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
+
+    if rivalPlayerFacing then
+      Player.facing = rivalPlayerFacing
+      Player.moveDir = rivalPlayerFacing
+    end
 
     if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
