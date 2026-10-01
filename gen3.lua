@@ -50,6 +50,7 @@ return function(mod)
   local momEventRunning = false
   local encounterRunning = false
   local rivalPlayerFacing = nil
+  local rivalFacingLocked = false
 
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -899,7 +900,7 @@ return function(mod)
   -- Pallet Town does not have the normal Rival object in its map object list.
   -- Build one from the same Rival graphics used by FireRed and add it only
   -- when the encounter starts.
-  local RIVAL_OBJECT_ID = 250
+  local RIVAL_OBJECT_ID = 8
 
   local function ensureRivalObject(x, y)
     local handle = Objects.find(RIVAL_OBJECT_ID)
@@ -1095,6 +1096,8 @@ return function(mod)
 
     local function beginBattle()
       rivalPlayerFacing = nil
+      rivalFacingLocked = false
+      Player.facingLocked = false
       local ok = BattleBridge.start(mod, liveGame, foe, {
         trainerId = trainerId,
         trainerName = rival,
@@ -1144,7 +1147,9 @@ return function(mod)
       end
       Player.facing = playerDir
       Player.moveDir = playerDir
-      Player.turnArmed = true
+      Player.turnTimer = 0
+      Player.turnArmed = false
+      Player.facingLocked = true
       rivalPlayerFacing = playerDir
       Objects.facePlayer(handle.localId)
       Message.show(
@@ -1268,8 +1273,7 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        -- Trigger one row before the Route 1 exit, so the event
-        -- starts safely inside Pallet Town instead of at the seam.
+        -- Intercept the north exit before the native warp can fire.
         if x and y and y == 2 and (x == 12 or x == 13) then
           if startRivalBattle(x, y) then
             return "blocked", "alternate_rival"
@@ -1318,6 +1322,12 @@ return function(mod)
     if rivalPlayerFacing then
       Player.facing = rivalPlayerFacing
       Player.moveDir = rivalPlayerFacing
+      Player.turnTimer = 0
+      Player.turnArmed = false
+      Player.facingLocked = rivalFacingLocked
+      if liveGame and Player.syncToHost then
+        Player.syncToHost(liveGame)
+      end
     end
 
     if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
