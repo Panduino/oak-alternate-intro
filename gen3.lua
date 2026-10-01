@@ -49,7 +49,6 @@ return function(mod)
   local liveGame
   local momEventRunning = false
   local encounterRunning = false
-  local rivalExitAnimation = nil
 
   local function starterRow(scene)
     return STARTER_BY_SPECIES[tonumber(scene._alternateStarterSpecies)]
@@ -1047,13 +1046,12 @@ return function(mod)
     for _, dir in ipairs(path) do
       steps[#steps + 1] = { kind = "step", dir = dir }
     end
-    Objects.startTrack(handle.localId, steps, function()
-      -- Keep the Rival on the boundary tile while his sprite walks off-screen.
-      rivalExitAnimation = {
-        handle = handle,
-        frames = 32,
-      }
-    end)
+    -- Keep the normal walking animation for the last three tiles as the
+    -- Rival walks beyond the Route 1 boundary.
+    steps[#steps + 1] = { kind = "step", dir = "up" }
+    steps[#steps + 1] = { kind = "step", dir = "up" }
+    steps[#steps + 1] = { kind = "step", dir = "up" }
+    Objects.startTrack(handle.localId, steps, hideAtRouteEntrance)
   end
 
   local function startRivalBattle(x, y)
@@ -1307,24 +1305,6 @@ return function(mod)
 
   mod.hooks:wrap("core.update", function(next, game, dt)
     local result = next(game, dt)
-
-    if rivalExitAnimation then
-      local handle = rivalExitAnimation.handle
-      if handle and not handle.hidden then
-        handle.cellY = 0
-        handle.targetY = 0
-        handle.py = (tonumber(handle.py) or 0) - 1
-        rivalExitAnimation.frames = rivalExitAnimation.frames - 1
-        if rivalExitAnimation.frames <= 0 then
-          rivalExitAnimation = nil
-          hideRival(handle)
-          Field.unlock("alternate_oak_rival")
-        end
-      else
-        rivalExitAnimation = nil
-        Field.unlock("alternate_oak_rival")
-      end
-    end
 
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
 
