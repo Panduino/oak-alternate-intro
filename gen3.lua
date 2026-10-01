@@ -954,13 +954,11 @@ return function(mod)
       done()
       return
     end
-    if not Objects.scriptStep(handle, dir, false, false, false) then
-      done()
-      return
+    local steps = {}
+    for _ = 1, count do
+      steps[#steps + 1] = { kind = "step", dir = dir }
     end
-    Objects.startTrack(handle.localId, {}, function()
-      moveSteps(handle, dir, count - 1, done)
-    end)
+    Objects.startTrack(handle.localId, steps, done)
   end
 
   local function spawnRival(x, playerY)
@@ -1010,19 +1008,15 @@ return function(mod)
         if Collision.inBounds(x + dx, y)
             and Collision.isWalkable(x + dx, y)
             and not Objects.at(x + dx, y) then
-          if Objects.scriptStep(handle, dir, false, false, false) then
-            Objects.startTrack(handle.localId, {}, function()
-              local nx = tonumber(handle.cellX) or x
-              local ny = tonumber(handle.cellY) or y
-              if ny == 0 then
-                hideAtRouteEntrance()
-              else
-                rivalLeave(handle, nx)
-              end
-            end)
-          else
-            hideAtRouteEntrance()
-          end
+          Objects.startTrack(handle.localId, { { kind = "step", dir = dir } }, function()
+            local nx = tonumber(handle.cellX) or x
+            local ny = tonumber(handle.cellY) or y
+            if ny == 0 then
+              hideAtRouteEntrance()
+            else
+              rivalLeave(handle, nx)
+            end
+          end)
           return
         end
       end
