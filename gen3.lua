@@ -968,14 +968,19 @@ return function(mod)
     -- The player is stopped on the north edge of Pallet Town. Put Rival
     -- on the first walkable tile below the player, never on the player's tile.
     local startY
+    local fallbackY
     for y = playerY + 1, math.min(playerY + 8, 19) do
       if Collision.inBounds(x, y)
           and Collision.isWalkable(x, y)
           and not Objects.at(x, y) then
-        startY = y
-        break
+        fallbackY = y
+        if y >= playerY + 4 then
+          startY = y
+          break
+        end
       end
     end
+    startY = startY or fallbackY
 
     if not startY then return nil end
 
@@ -1083,8 +1088,9 @@ return function(mod)
           mod.save:set("firered_pallet_rival_done", true)
           Party.healAll(liveGame.save.party)
           Message.show(
-            "I need to train my POKéMON more.\\n" ..
-            "I'll see you around, " .. name .. "!",
+            "OK! I'll make my POKéMON\\n" ..
+            "fight to toughen it up!\\n" ..
+            name .. "! Smell you later!",
             {
               npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
               done = function()
@@ -1105,10 +1111,9 @@ return function(mod)
     moveSteps(handle, "up", math.max(0, startY - y - 1), function()
       Objects.scriptFace(handle, "up")
       Message.show(
-        "Hey, " .. name .. "!\\n" ..
-        "Heading out already?\\f" ..
-        "I've got a POKéMON too.\\n" ..
-        "Let's have a battle!",
+        rival .. "! You're finally out!\\n" ..
+        "You overslept, didn't you?\\f" ..
+        "I'll take you on!",
         {
           npcColor = FrlgFont.NPC_TEXT_COLOR.MALE,
           done = beginBattle,
