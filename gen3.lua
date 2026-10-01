@@ -992,6 +992,7 @@ return function(mod)
   local function rivalLeave(handle, playerX)
     local function hideAtRouteEntrance()
       hideRival(handle)
+      Field.unlock("alternate_oak_rival")
     end
 
     local function step()
@@ -1049,6 +1050,7 @@ return function(mod)
     if not handle then return false end
 
     encounterRunning = true
+    Field.lock("alternate_oak_rival")
     setVar("VAR_MAP_SCENE_PALLET_TOWN_OAK", 3)
 
     if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
@@ -1064,6 +1066,7 @@ return function(mod)
     if not foe or not foe.party or not foe.party[1] then
       hideRival(handle)
       encounterRunning = false
+      Field.unlock("alternate_oak_rival")
       return false
     end
 
@@ -1105,6 +1108,7 @@ return function(mod)
       if not ok then
         hideRival(handle)
         encounterRunning = false
+        Field.unlock("alternate_oak_rival")
       end
     end
 
@@ -1178,6 +1182,10 @@ return function(mod)
   local nativePlayerTryMove = Player.tryMove
 
   Player.tryMove = function(dir, game, run)
+    if encounterRunning then
+      return "blocked", "alternate_rival"
+    end
+
     if liveGame
         and not momEventRunning
         and not encounterRunning
