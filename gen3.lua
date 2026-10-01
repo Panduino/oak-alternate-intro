@@ -934,11 +934,19 @@ return function(mod)
   end
 
   local function revealRival(handle, x, y)
+    handle.cellX = x
+    handle.cellY = y
+    handle.homeX = x
+    handle.homeY = y
+    handle.targetX = x
+    handle.targetY = y
+    handle.px = x * 16
+    handle.py = y * 16
+    handle.facing = "up"
     handle.hidden = false
     handle.visible = true
     handle.invisible = false
     handle.scriptBusy = false
-    handle:placeAt(x, y, "up")
   end
 
   local function moveSteps(handle, dir, count, done)
@@ -946,7 +954,11 @@ return function(mod)
       done()
       return
     end
-    handle:scriptMove(dir, 1, function()
+    if not Objects.scriptStep(handle, dir, false, false, false) then
+      done()
+      return
+    end
+    Objects.startTrack(handle.localId, {}, function()
       moveSteps(handle, dir, count - 1, done)
     end)
   end
@@ -998,15 +1010,19 @@ return function(mod)
         if Collision.inBounds(x + dx, y)
             and Collision.isWalkable(x + dx, y)
             and not Objects.at(x + dx, y) then
-          handle:scriptMove(dir, 1, function()
-            local nx = tonumber(handle.cellX) or x
-            local ny = tonumber(handle.cellY) or y
-            if ny == 0 then
-              hideAtRouteEntrance()
-            else
-              rivalLeave(handle, nx)
-            end
-          end)
+          if Objects.scriptStep(handle, dir, false, false, false) then
+            Objects.startTrack(handle.localId, {}, function()
+              local nx = tonumber(handle.cellX) or x
+              local ny = tonumber(handle.cellY) or y
+              if ny == 0 then
+                hideAtRouteEntrance()
+              else
+                rivalLeave(handle, nx)
+              end
+            end)
+          else
+            hideAtRouteEntrance()
+          end
           return
         end
       end
@@ -1093,7 +1109,7 @@ return function(mod)
     end
 
     moveSteps(handle, "up", math.max(0, startY - y - 1), function()
-      handle:face("up")
+      Objects.scriptFace(handle, "up")
       Message.show(
         "Hey, " .. name .. "!\\n" ..
         "Heading out already?\\f" ..
