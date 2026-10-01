@@ -1143,7 +1143,7 @@ return function(mod)
       if math.abs(px - rx) > math.abs(py - ry) then
         playerDir = px > rx and "right" or "left"
       else
-        playerDir = py > ry and "down" or "up"
+        playerDir = py < ry and "down" or "up"
       end
       Player.facing = playerDir
       Player.moveDir = playerDir
@@ -1326,9 +1326,6 @@ return function(mod)
       Player.turnTimer = 0
       Player.turnArmed = false
       Player.facingLocked = rivalFacingLocked
-      if liveGame and Player.syncToHost then
-        Player.syncToHost(liveGame)
-      end
     end
 
     if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
