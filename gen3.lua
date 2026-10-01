@@ -1134,11 +1134,13 @@ return function(mod)
       local py = tonumber(Player.cellY) or y
       local rx = tonumber(handle.cellX) or x
       local ry = tonumber(handle.cellY) or y
+      local playerDir
       if math.abs(px - rx) > math.abs(py - ry) then
-        Player.facing = px > rx and "right" or "left"
+        playerDir = px > rx and "right" or "left"
       else
-        Player.facing = py > ry and "down" or "up"
+        playerDir = py > ry and "down" or "up"
       end
+      Player.scriptFace(playerDir)
       Objects.facePlayer(handle.localId)
       Message.show(
         name .. "! You're finally out!\\n" ..
