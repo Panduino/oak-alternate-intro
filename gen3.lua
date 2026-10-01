@@ -1004,7 +1004,7 @@ return function(mod)
       if y > 0 and Collision.inBounds(x, y - 1)
           and Collision.isWalkable(x, y - 1)
           and not Objects.at(x, y - 1) then
-        handle:scriptMove("up", 1, step)
+        Objects.startTrack(handle.localId, { { kind = "step", dir = "up" } }, step)
         return
       end
 
