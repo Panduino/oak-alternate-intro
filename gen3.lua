@@ -1049,6 +1049,8 @@ return function(mod)
     steps[#steps + 1] = { kind = "step", dir = "up" }
     steps[#steps + 1] = { kind = "step", dir = "up" }
     steps[#steps + 1] = { kind = "step", dir = "up" }
+    steps[#steps + 1] = { kind = "step", dir = "up" }
+    steps[#steps + 1] = { kind = "step", dir = "up" }
     Objects.startTrack(handle.localId, steps, hideAtRouteEntrance)
   end
 
