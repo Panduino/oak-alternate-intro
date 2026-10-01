@@ -1273,10 +1273,16 @@ return function(mod)
         local x = tonumber(Player.cellX)
         local y = tonumber(Player.cellY)
 
-        -- Intercept the north exit before the native warp can fire.
-        if x and y and y == 2 and (x == 12 or x == 13) then
-          if startRivalBattle(x, y) then
-            return "blocked", "alternate_rival"
+        -- Intercept the Route 1 warp before the native warp can fire.
+        if x and y then
+          local exitWarp = Collision.warpAt(x, y - 1)
+          local exitsToRoute1 = exitWarp
+            and tostring(exitWarp.destMap or ""):find("ROUTE_1", 1, true)
+          local knownNorthExit = y == 2 and (x == 12 or x == 13)
+          if exitsToRoute1 or knownNorthExit then
+            if startRivalBattle(x, y) then
+              return "blocked", "alternate_rival"
+            end
           end
         end
       end
