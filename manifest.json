@@ -1,0 +1,18 @@
+{
+  "id": "untamed_modern_spawns_bridge",
+  "name": "Untamed Advanced - Modern Spawns Bridge",
+  "version": "1.0.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "category": "GAMEPLAY",
+  "games": ["firered", "leafgreen", "emerald"],
+  "priority": 110,
+  "dependencies": [
+    "modern_spawns",
+    "untamed_advanced"
+  ],
+  "permissions": ["engine_internals"],
+  "description": "Feeds Modern Spawns' generated FireRed/LeafGreen encounter tables into Untamed Advanced's visible overworld wild encounters.",
+  "github": "Panduino/oak-alternate-intro"
+}
