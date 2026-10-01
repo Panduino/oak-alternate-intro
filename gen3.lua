@@ -1138,6 +1138,14 @@ return function(mod)
 
   mod.events:on("map.entered", function(ev)
     local mapId = tostring(ev and ev.mapId or "")
+
+    -- Rival is not a normal Pallet Town object. Keep the temporary encounter
+    -- object hidden whenever the map is entered; story code reveals it.
+    if mapId == "FR_PALLET_TOWN" or mapId == "PalletTown" then
+      local rivalHandle = Objects.find(RIVAL_OBJECT_ID)
+      if rivalHandle then hideRival(rivalHandle) end
+    end
+
     if mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
       if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
         Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
