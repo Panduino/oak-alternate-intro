@@ -25,8 +25,7 @@ return function(mod)
 
   local STARTERS = {
     -- FireRed's VAR_STARTER_MON encoding is 0=Bulbasaur, 1=Squirtle,
-    -- 2=Charmander. Later Rival scripts use this exact value to choose
-    -- the matching Rival team, so these indexes must follow the ROM.
+    -- 2=Charmander. Later Rival scripts use this exact value.
     { species = 1, index = 0, name = "BULBASAUR" },
     { species = 4, index = 2, name = "CHARMANDER" },
     { species = 7, index = 1, name = "SQUIRTLE" },
@@ -1251,3 +1250,112 @@ return function(mod)
         if dir == "up" then dy = -1
         elseif dir == "down" then dy = 1
         elseif dir == "left" then dx = -1
+        elseif dir == "right" then dx = 1
+        end
+
+        local nx = tonumber(Player.cellX) + dx
+        local ny = tonumber(Player.cellY) + dy
+        if Collision.warpAt(nx, ny) then
+          runMomEvent()
+          return "blocked", "alternate_mom"
+        end
+      end
+    end
+
+    if liveGame
+        and dir == "up"
+        and not momEventRunning
+        and not encounterRunning
+        and mod.save:get("firered_starter")
+        and mod.save:get("firered_mom_gift_done")
+        and not mod.save:get("firered_pallet_rival_done") then
+
+      local mapId = tostring(Map.current or (liveGame.save and liveGame.save.map) or "")
+      if mapId == "FR_PALLET_TOWN" or mapId == "PalletTown" then
+        local x = tonumber(Player.cellX)
+        local y = tonumber(Player.cellY)
+
+        -- Trigger one row before the Route 1 exit, so the event
+        -- starts safely inside Pallet Town instead of at the seam.
+        if x and y and y == 2 and (x == 12 or x == 13) then
+          if startRivalBattle(x, y) then
+            return "blocked", "alternate_rival"
+          end
+        end
+      end
+    end
+
+    return nativePlayerTryMove(dir, game, run)
+  end
+
+  --------------------------------------------------------------------------
+  -- Pallet Town Rival trigger
+  --------------------------------------------------------------------------
+
+  mod.events:on("world.stepped", function(ev)
+    if encounterRunning
+        or momEventRunning
+        or mod.save:get("firered_pallet_rival_done")
+        or not mod.save:get("firered_starter")
+        or not mod.save:get("firered_mom_gift_done") then
+      return
+    end
+
+    local mapId = tostring(ev and ev.mapId or "")
+    if mapId ~= "FR_PALLET_TOWN" and mapId ~= "PalletTown" then return end
+
+    local x = tonumber(ev.x)
+    local y = tonumber(ev.y)
+    if not x or not y then return end
+
+    if y == 2 and (x == 12 or x == 13) then
+      startRivalBattle(x, y)
+    end
+  end)
+
+  --------------------------------------------------------------------------
+  -- Mom trigger
+  --------------------------------------------------------------------------
+
+  mod.hooks:wrap("core.update", function(next, game, dt)
+    local result = next(game, dt)
+
+    local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
+
+    if rivalPlayerFacing then
+      Player.facing = rivalPlayerFacing
+      Player.moveDir = rivalPlayerFacing
+      Player.turnTimer = 0
+      Player.turnArmed = false
+      Player.facingLocked = rivalFacingLocked
+    end
+
+    if liveGame and mapId:find("PALLET_TOWN_PROFESSOR_OAKS_LAB", 1, true) then
+      if Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_OAK_IN_HIS_LAB, false)
+      end
+      if Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_RIVAL_IN_LAB, true)
+      end
+      if Flags.IDS.FLAG_HIDE_POKEDEX then
+        Flags.setFlag(Space.store, nil, Flags.IDS.FLAG_HIDE_POKEDEX, true)
+      end
+      local species = tonumber(mod.save:get("firered_starter"))
+      local taken = { [species] = true }
+      if species == 1 then taken[4] = true
+      elseif species == 4 then taken[7] = true
+      elseif species == 7 then taken[1] = true end
+      local ballFlags = {
+        [1] = "FLAG_HIDE_BULBASAUR_BALL",
+        [4] = "FLAG_HIDE_CHARMANDER_BALL",
+        [7] = "FLAG_HIDE_SQUIRTLE_BALL",
+      }
+      for speciesId, flagName in pairs(ballFlags) do
+        local flag = Flags.IDS[flagName]
+        if flag then Flags.setFlag(Space.store, nil, flag, taken[speciesId] == true) end
+      end
+    end
+
+    return result
+  end)
+end
