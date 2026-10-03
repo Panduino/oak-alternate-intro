@@ -1174,6 +1174,15 @@ return function(mod)
 
   mod.events:on("game.ready", function(ev)
     liveGame = ev.game
+
+    -- Synchronize FireRed's native starter selector once the live scripting
+    -- store exists. Do this once per game load; writing it every frame can
+    -- interfere with field-event progression and movement interception.
+    local species = tonumber(mod.save:get("firered_starter"))
+    local row = STARTER_BY_SPECIES[species]
+    if row then
+      setVar("VAR_STARTER_MON", row.index)
+    end
   end)
 
   mod.events:on("map.entered", function(ev)
@@ -1319,15 +1328,6 @@ return function(mod)
 
   mod.hooks:wrap("core.update", function(next, game, dt)
     local result = next(game, dt)
-
-    -- Keep FireRed's native starter selector synchronized after the live save
-    -- and scripting store are loaded. This also migrates existing saves made
-    -- before the starter-index mapping was corrected.
-    local savedStarter = tonumber(mod.save:get("firered_starter"))
-    local savedStarterRow = STARTER_BY_SPECIES[savedStarter]
-    if savedStarterRow then
-      setVar("VAR_STARTER_MON", savedStarterRow.index)
-    end
 
     local mapId = tostring(Map.current or (liveGame and liveGame.save and liveGame.save.map) or "")
 
