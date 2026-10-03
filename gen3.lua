@@ -1174,6 +1174,15 @@ return function(mod)
 
   mod.events:on("game.ready", function(ev)
     liveGame = ev.game
+
+    -- Existing saves created before the starter-index fix can retain the
+    -- wrong vanilla VAR_STARTER_MON value. Repair only that value from the
+    -- starter recorded by this mod; do not rerun new-game progression.
+    local species = tonumber(mod.save:get("firered_starter"))
+    local row = STARTER_BY_SPECIES[species]
+    if row then
+      setVar("VAR_STARTER_MON", row.index)
+    end
   end)
 
   mod.events:on("map.entered", function(ev)
