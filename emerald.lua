@@ -22,10 +22,8 @@ return function(mod)
   end
 
   local function prepare(session)
-    -- Start outside the truck in Littleroot, at its ordinary exit.
-    -- No scripted movement, house warp, or clock interaction is needed.
-    session.map = "EM_LITTLEROOT_TOWN"
-    session.x, session.y, session.facing = 3, 10, "right"
+    -- Keep the native moving-truck start and its exit warp.
+    -- Only the story state is advanced; the player exits normally.
 
     -- Intro 7 = Mom's TV broadcast finished / told to meet the rival.
     -- Town 1 = met the rival; the next event is the Birch rescue.
@@ -55,13 +53,8 @@ return function(mod)
         and reason == "new_game"
         and session.map == "EM_INSIDE_OF_TRUCK" then
       prepare(session)
-      -- Do not run the truck field callback; it would lock the new map
-      -- and replay the truck sequence over Littleroot.
-      local fieldOpts = {}
-      for k, v in pairs(opts or {}) do fieldOpts[k] = v end
-      fieldOpts.fieldCallback = nil
-      return nativeEnterField(self, session, reason, fieldOpts)
     end
+    -- Keep the normal truck field callback and moving-truck sequence.
     return nativeEnterField(self, session, reason, opts)
   end
 end
