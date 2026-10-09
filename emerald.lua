@@ -6,8 +6,8 @@ return function(mod)
   Game3._alternateOakEmeraldQuickStart = true
 
   local nativeEnterField = Game3._enterField
-  local Map = require("src.core.game3.map")
-  local nativeMapLoad = Map.load
+  local Space = require("src.core.game3.scripting.space")
+  local nativeRunEnterScripts = Space.runEnterScripts
   local pendingTruckExit = false
   local Flags = require("src.core.game3.scripting.flags")
   local EM = Flags.forVersion("emerald")
@@ -67,15 +67,28 @@ return function(mod)
     return nativeEnterField(self, session, reason, opts)
   end
 
-  Map.load = function(modArg, game, mapId, opts)
+  -- Apply quick-start state after the truck exit has created the live
+  -- scripting store, but before Littleroot's ON_FRAME Mom event is selected.
+  Space.runEnterScripts = function(modArg, mapId, game, world, opts)
     if pendingTruckExit and mapId == "EM_LITTLEROOT_TOWN" then
       local Runtime = require("src.core.game3.runtime")
       local session = Runtime.getSession()
       if session and session.version == "emerald" then
+        -- Space.activate has already loaded the store from session by here.
+        -- Update both so map scripts and the eventual save see the same state.
         prepare(session)
+        local store = Space.store
+        if store then
+          for k, v in pairs(session.flags or {}) do
+            store.flags[tonumber(k) or k] = v
+          end
+          for k, v in pairs(session.vars or {}) do
+            store.vars[tonumber(k) or k] = v
+          end
+        end
         pendingTruckExit = false
       end
     end
-    return nativeMapLoad(modArg, game, mapId, opts)
+    return nativeRunEnterScripts(modArg, mapId, game, world, opts)
   end
 end
