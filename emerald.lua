@@ -6,6 +6,9 @@ return function(mod)
   Game3._alternateOakEmeraldQuickStart = true
 
   local nativeEnterField = Game3._enterField
+  local Map = require("src.core.game3.map")
+  local nativeMapLoad = Map.load
+  local pendingTruckExit = false
   local Flags = require("src.core.game3.scripting.flags")
   local EM = Flags.forVersion("emerald")
 
@@ -56,9 +59,23 @@ return function(mod)
     if session and session.version == "emerald"
         and reason == "new_game"
         and session.map == "EM_INSIDE_OF_TRUCK" then
-      prepare(session)
+      -- The truck's exit coord event requires its vanilla intro state.
+      -- Advance the story only when the truck actually warps to town.
+      pendingTruckExit = true
     end
     -- Keep the normal truck field callback and moving-truck sequence.
     return nativeEnterField(self, session, reason, opts)
+  end
+
+  Map.load = function(modArg, game, mapId, opts)
+    if pendingTruckExit and mapId == "EM_LITTLEROOT_TOWN" then
+      local Runtime = require("src.core.game3.runtime")
+      local session = Runtime.getSession()
+      if session and session.version == "emerald" then
+        prepare(session)
+        pendingTruckExit = false
+      end
+    end
+    return nativeMapLoad(modArg, game, mapId, opts)
   end
 end
