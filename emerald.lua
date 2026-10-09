@@ -42,6 +42,10 @@ return function(mod)
 
     -- Equivalent to confirming the wall clock in the normal intro.
     -- Use the game's own RTC initialization rather than inventing a time.
+    local Rtc = require("src.core.game3.rtc")
+    -- Zero offset means Emerald's local time tracks the host system clock.
+    -- This is initialized once on new game, not reset on every load.
+    session.localTimeOffset = Rtc.newTime(0, 0, 0, 0)
     local TimeEvents = require("src.core.game3.time_events")
     local store = { flags = session.flags, vars = session.vars }
     TimeEvents.init(session, { store = store })
