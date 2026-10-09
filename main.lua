@@ -8,9 +8,19 @@ local function installGen3(mod)
   return chunk()(mod)
 end
 
+local function installEmerald(mod)
+  local source = assert(mod:read("emerald.lua"),
+    "alternate_oak_intro: missing emerald.lua")
+  return assert(load(source, "@alternate_oak_intro/emerald.lua"))()(mod)
+end
+
 return function(mod)
 
   local ok, GameVersion = pcall(require, "src.core.GameVersion")
+  if (mod.game and mod.game.version == "emerald")
+      or (ok and GameVersion.get() == "emerald") then
+    return installEmerald(mod)
+  end
   if (mod.game and mod.game.version == "firered")
       or (ok and GameVersion.get() == "firered") then
     return installGen3(mod)
