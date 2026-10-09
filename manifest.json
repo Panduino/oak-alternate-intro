@@ -1,12 +1,15 @@
 {
   "id": "alternate_oak_intro",
-  "name": "Alternate Oak Intro",
-  "version": "1.0.0",
+  "name": "Gen 1 / Gen 3 Quick Start",
+  "version": "1.1.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
   "category": "GAMEPLAY",
-  "games": ["gen1", "gen3"],
+  "games": [
+    "gen1",
+    "gen3"
+  ],
   "game_version": ">=0.0.0-0 <2.0.0",
   "priority": 80,
   "dependencies": [],
@@ -16,5 +19,5 @@
   ],
   "conflicts": [],
   "affects_link": false,
-  "description": "Replaces the early-game Oak sequence with an alternate starter-focused intro."
+  "description": "Quick-start intros for Gen 1 and FireRed/LeafGreen, plus an Emerald Littleroot skip that preserves the Birch rescue and starter progression."
 }
